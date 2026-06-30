@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag, FolderSearch, Mail, AtSign } from "lucide-react";
+import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag, FolderSearch, Mail, AtSign, Globe, Instagram, Facebook, Hash, Newspaper, Rss, MessageSquare } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
@@ -9,13 +9,36 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
 import { runYouTubeScan, verifyYouTubeMatch } from "@/lib/youtube-matching.functions";
+import { runMultiPlatformScan } from "@/lib/multi-platform-monitoring.functions";
 import { createViolationFromMatch } from "@/lib/matching.functions";
 import { openCaseFromMatch, investigateCase, discoverContacts } from "@/lib/browser-agent.functions";
 
 export const Route = createFileRoute("/youtube")({
-  head: () => ({ meta: [{ title: "YouTube Monitoring — Eterna AI" }] }),
+  head: () => ({ meta: [{ title: "Monitoring Dashboard — Eterna AI" }] }),
   component: YouTubeDash,
 });
+
+const PLATFORM_META: Record<string, { Icon: any; color: string; bg: string }> = {
+  YouTube:   { Icon: Youtube,       color: "text-[#FF0000]",      bg: "bg-red-500/10 border-red-500/30" },
+  Instagram: { Icon: Instagram,     color: "text-pink-600",       bg: "bg-pink-500/10 border-pink-500/30" },
+  Facebook:  { Icon: Facebook,      color: "text-blue-600",       bg: "bg-blue-500/10 border-blue-500/30" },
+  TikTok:    { Icon: MessageSquare, color: "text-foreground",     bg: "bg-foreground/10 border-foreground/30" },
+  X:         { Icon: Hash,          color: "text-foreground",     bg: "bg-foreground/10 border-foreground/30" },
+  Reddit:    { Icon: MessageSquare, color: "text-orange-600",     bg: "bg-orange-500/10 border-orange-500/30" },
+  Website:   { Icon: Globe,         color: "text-primary",        bg: "bg-primary/10 border-primary/30" },
+  News:      { Icon: Newspaper,     color: "text-emerald-700",    bg: "bg-emerald-500/10 border-emerald-500/30" },
+  Blog:      { Icon: Rss,           color: "text-amber-700",      bg: "bg-amber-500/10 border-amber-500/30" },
+};
+
+function PlatformBadge({ platform }: { platform: string }) {
+  const meta = PLATFORM_META[platform] ?? PLATFORM_META.Website;
+  const Icon = meta.Icon;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.bg} ${meta.color}`}>
+      <Icon className="h-3 w-3" /> {platform}
+    </span>
+  );
+}
 
 const FAIR_USE_BADGE: Record<string, { label: string; className: string }> = {
   high_confidence_unauthorized: { label: "Unauthorized Use", className: "bg-destructive/10 text-destructive border-destructive/30" },
