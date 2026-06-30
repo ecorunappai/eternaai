@@ -90,7 +90,7 @@ function Matching() {
         <div className="mb-3 flex items-center gap-2">
           <ScanSearch className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Run Reverse-Image Scan</h2>
-          <span className="text-xs text-muted-foreground">TinEye + fallback engines · simulated demo</span>
+          <span className="text-xs text-muted-foreground">Live: Google Lens via Firecrawl · returns real source URLs</span>
         </div>
         {assets.length === 0 ? (
           <p className="text-sm text-muted-foreground">Register content first to enable matching.</p>
@@ -109,24 +109,34 @@ function Matching() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{a.title}</div>
                     <div className="text-[11px] font-mono text-muted-foreground truncate">
-                      {a.phash ? `pHash ${a.phash.slice(0, 12)}…` : "No fingerprint"}
+                      {a.asset_type !== "image" ? "Video — demo only" : a.phash ? `pHash ${a.phash.slice(0, 12)}…` : "No fingerprint"}
                     </div>
                   </div>
                 </div>
-                <button
-                  disabled={!a.phash || scanning === a.id}
-                  onClick={() => onScan(a.id)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                  style={{ background: "var(--gradient-violet)" }}
-                >
-                  {scanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
-                  Scan
-                </button>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button
+                    disabled={a.asset_type !== "image" || scanning === a.id}
+                    onClick={() => onScan(a.id, "real")}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                    style={{ background: "var(--gradient-violet)" }}
+                  >
+                    {scanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
+                    Live Scan
+                  </button>
+                  <button
+                    disabled={!a.phash || scanning === a.id}
+                    onClick={() => onScan(a.id, "demo")}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-3 text-[11px] font-medium hover:bg-accent disabled:opacity-50"
+                  >
+                    Demo
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
