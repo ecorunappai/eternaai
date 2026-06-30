@@ -174,7 +174,7 @@ export const classifyMatches = createServerFn({ method: "POST" })
     const [{ data: owned }, { data: originals }, { data: matches }] = await Promise.all([
       supabase.from("owned_accounts").select("*").eq("user_id", userId),
       supabase.from("original_videos").select("id,video_id,title").eq("user_id", userId),
-      supabase.from("discovered_matches").select("id,channel_name,video_title,video_id,source_url").eq("user_id", userId).eq("discovered_via", "youtube_firecrawl_ai_verified"),
+      supabase.from("discovered_matches").select("id,channel_name,video_title,video_id,source_url,notes").eq("user_id", userId).eq("discovered_via", "youtube_firecrawl_ai_verified"),
     ]);
 
     const ownedChannelNames = new Set((owned ?? []).filter(o => o.platform === "youtube").map(o => (o.display_name ?? "").toLowerCase().trim()));
@@ -189,13 +189,13 @@ export const classifyMatches = createServerFn({ method: "POST" })
         Array.from(ownedHandles).some(h => h && (chan.includes(h) || url.includes(h.replace(/^@/, ""))));
       const linkedOriginal = m.video_id ? (originalIdByVideoId.get(m.video_id) ?? null) : null;
 
-      const title = `${m.video_title ?? ""} ${chan}`.toLowerCase();
+      const title = `${m.video_title ?? ""} ${chan} ${m.notes ?? ""}`.toLowerCase();
       let category = "unknown";
       if (isOwned || linkedOriginal) category = "official";
       else if (/\b(reaction|reacts|reacting)\b|റിയാക്ഷൻ/.test(title)) category = "reaction";
       else if (/\b(troll|roast|meme)\b|ട്രോൾ/.test(title)) category = "troll";
-      else if (/\b(news|commentary|review|വാർത്ത)\b/.test(title)) category = "news";
-      else if (/\b(full video|reupload|repost|original|leaked)\b/.test(title)) category = "reupload";
+      else if (/\b(news|commentary|review|വാർത്ത|latest issue|issue|controversy|exposed|scandal)\b/.test(title)) category = "news";
+      else if (/\b(full video|reupload|repost|original|leaked|without permission)\b/.test(title)) category = "reupload";
       else if (/\b(fan ?page|fans|fanclub|tribute|status|edit|ഫാൻസ്)\b/.test(title)) category = "fan";
       else if (/\b(fake|impersonat|deepfake)\b/.test(title)) category = "impersonation";
       else category = "needs_review";
