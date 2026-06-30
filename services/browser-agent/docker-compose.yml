@@ -30,7 +30,9 @@ services:
       - PW_HEADLESS=true
       - PW_TIMEOUT_MS=30000
       - PW_CONCURRENCY=${PW_CONCURRENCY:-2}
-      - AGENT_DATA_DIR=/app
+      # AGENT_DATA_DIR is intentionally unset — defaults map cleanly to the named volumes:
+      #   evidence  → /app/evidence (evidence_data volume)
+      #   tasks.db  → /app/data/tasks.db (agent_data volume, via process.cwd())
     shm_size: "1gb"
     volumes:
       - evidence_data:/app/evidence
