@@ -284,7 +284,7 @@ function AgentConsolePage() {
   useEffect(() => {
     if (!user) return;
     refreshList();
-    status().then(setAgentOnline).catch(() => setAgentOnline({ online: false, configured: false, reason: "probe failed" }));
+    status().then(setAgentOnline).catch(() => setAgentOnline({ online: false, configured: false, code: "probe_failed", reason: "probe failed" }));
     const t = window.setInterval(refreshList, 4000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
