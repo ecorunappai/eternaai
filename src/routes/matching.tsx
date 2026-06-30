@@ -18,6 +18,7 @@ function Matching() {
   const { user } = useAuth();
   const [assets, setAssets] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string>("all");
   const [scanning, setScanning] = useState<string | null>(null);
   const scan = useServerFn(runMatchingScan);
@@ -25,11 +26,20 @@ function Matching() {
 
   async function load() {
     const [a, m] = await Promise.all([
-      supabase.from("assets").select("id,title,asset_type,phash,storage_path").order("created_at", { ascending: false }),
+      supabase.from("assets").select("id,title,asset_type,phash,storage_path,file_url").order("created_at", { ascending: false }),
       supabase.from("discovered_matches").select("*").order("final_confidence_score", { ascending: false }),
     ]);
-    setAssets(a.data ?? []);
+    const list = a.data ?? [];
+    setAssets(list);
     setMatches(m.data ?? []);
+    // Resolve signed URLs for thumbnails (images only)
+    const map: Record<string, string> = {};
+    await Promise.all(list.map(async (asset: any) => {
+      if (asset.asset_type !== "image" || !asset.storage_path) return;
+      const { data: signed } = await supabase.storage.from("assets").createSignedUrl(asset.storage_path, 3600);
+      if (signed?.signedUrl) map[asset.id] = signed.signedUrl;
+    }));
+    setThumbs(map);
   }
   useEffect(() => { if (user) load(); }, [user]);
 
@@ -83,10 +93,19 @@ function Matching() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {assets.map((a) => (
               <div key={a.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium">{a.title}</div>
-                  <div className="text-[11px] font-mono text-muted-foreground truncate">
-                    {a.phash ? `pHash ${a.phash.slice(0, 12)}…` : "No fingerprint"}
+                <div className="flex items-center gap-3 min-w-0">
+                  {thumbs[a.id] ? (
+                    <img src={thumbs[a.id]} alt={a.title} className="h-12 w-12 rounded-md object-cover border border-border" />
+                  ) : (
+                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                      <ImageOff className="h-4 w-4" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{a.title}</div>
+                    <div className="text-[11px] font-mono text-muted-foreground truncate">
+                      {a.phash ? `pHash ${a.phash.slice(0, 12)}…` : "No fingerprint"}
+                    </div>
                   </div>
                 </div>
                 <button
@@ -123,9 +142,13 @@ function Matching() {
               return (
                 <li key={m.id} className="p-5 hover:bg-accent/20">
                   <div className="flex items-start gap-4">
-                    <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                      <ImageOff className="h-6 w-6" />
-                    </div>
+                    {thumbs[m.asset_id] ? (
+                      <img src={thumbs[m.asset_id]} alt="match preview" className="h-20 w-20 shrink-0 rounded-lg object-cover border border-border" />
+                    ) : (
+                      <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                        <ImageOff className="h-6 w-6" />
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>
