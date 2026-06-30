@@ -28,6 +28,8 @@ const FAIR_USE_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 const TABS: Array<{ id: string; label: string }> = [
+  { id: "latest", label: "Latest Videos" },
+  { id: "new_today", label: "New Discoveries" },
   { id: "official", label: "Official Content" },
   { id: "reupload", label: "Suspected Reupload" },
   { id: "reaction", label: "Reaction" },
@@ -36,6 +38,7 @@ const TABS: Array<{ id: string; label: string }> = [
   { id: "fan", label: "Fan / Edit" },
   { id: "impersonation", label: "Impersonation" },
   { id: "needs_review", label: "Needs Review" },
+  { id: "historical", label: "Historical (2020–2024)" },
   { id: "all", label: "All" },
 ];
 
