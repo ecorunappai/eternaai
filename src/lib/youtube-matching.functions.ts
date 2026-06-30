@@ -500,6 +500,11 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       );
       const risk = preFinal >= 60 ? "possible" : "review";
       const resultCategory = resultCategoryFromSignals(c.title, c.channel, c.matchedKeyword);
+      const tags = contentTagsFor(c.title, c.channel, c.isShort);
+      const trending = computeTrendingScore(c.recencyHours, c.viewCount);
+      const publishedAt = c.recencyHours != null
+        ? new Date(Date.now() - c.recencyHours * 3600 * 1000).toISOString()
+        : null;
       return {
         asset_id: assetId,
         user_id: userId,
@@ -518,7 +523,13 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         discovered_via: "youtube_firecrawl_ai_verified",
         result_category: resultCategory,
         is_owned: false,
-        notes: `KEYWORD:${c.matchedKeyword} | TYPE:${cls.risk} | NEW_DISCOVERY | Visual face verification pending — click Verify Face to confirm.`,
+        published_at: publishedAt,
+        recency_hours: c.recencyHours ?? null,
+        recency_label: recencyLabel(c.recencyHours),
+        view_count: c.viewCount ?? null,
+        trending_score: trending,
+        content_tags: tags,
+        notes: `KEYWORD:${c.matchedKeyword} | TYPE:${cls.risk} | UPLOADED:${c.publishedText ?? "unknown"} | VIEWS:${c.viewCount ?? "?"} | TRENDING:${trending} | NEW_DISCOVERY | Visual face verification pending — click Verify Face to confirm.`,
       };
     });
 
