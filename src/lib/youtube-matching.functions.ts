@@ -196,6 +196,17 @@ async function firecrawlHtml(apiKey: string, url: string, waitFor = 3500): Promi
   return typeof p?.html === "string" ? p.html : "";
 }
 
+// YouTube search sort tokens (`&sp=...`). Encoded values match the actual
+// filter chip URLs YouTube generates when you pick "Sort by".
+const SORT_MODES: Array<{ label: string; sp: string }> = [
+  { label: "relevance", sp: "" },
+  { label: "upload_date", sp: "CAI%253D" },
+  { label: "view_count", sp: "CAMSAhAB" },
+];
+const SHORTS_ONLY_SP = "EgIYAQ%253D%253D";
+const YEAR_SUFFIXES = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
+const GOOGLE_SUFFIXES = ["", "reaction", "troll", "issue", "controversy", "exposed", "scandal", "interview", "news", "podcast", "livestream"];
+
 export const runYouTubeScan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ScanInput.parse(d))
@@ -212,62 +223,111 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     }
 
     const subject = data.query.trim();
-    const queries = expandQueries(subject);
+    const keywordQueries = expandQueries(subject);
 
-    // Discovery: per-query try YouTube desktop first; fall through to other sources only
-    // if YouTube returned nothing. Run queries in parallel batches to stay fast.
+    // ---------- Build the deep multi-pass URL plan ----------
+    type SourceTask = { url: string; matchedKeyword: string; pass: string };
+    const plan: SourceTask[] = [];
+    const ytSearch = (q: string, sp: string) =>
+      `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}${sp ? `&sp=${sp}` : ""}`;
+    const mYtSearch = (q: string, sp: string) =>
+      `https://m.youtube.com/results?search_query=${encodeURIComponent(q)}${sp ? `&sp=${sp}` : ""}`;
+    const google = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}&num=50`;
+    const ddg = (q: string) => `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+
+    // Pass 1-3: per-keyword × relevance/date/views (covers latest + old + popular).
+    const KEYWORD_CAP = 18;
+    for (const q of keywordQueries.slice(0, KEYWORD_CAP)) {
+      for (const mode of SORT_MODES) {
+        plan.push({ url: ytSearch(q, mode.sp), matchedKeyword: q, pass: `yt_${mode.label}` });
+      }
+    }
+    // Pass 4: shorts-only filter on the base subject + top intent keywords.
+    for (const q of [subject, `${subject} troll`, `${subject} reaction`, `${subject} viral`]) {
+      plan.push({ url: ytSearch(q, SHORTS_ONLY_SP), matchedKeyword: q, pass: "yt_shorts" });
+    }
+    // Pass 5: channels search.
+    plan.push({ url: `https://www.youtube.com/results?search_query=${encodeURIComponent(subject)}&sp=EgIQAg%253D%253D`, matchedKeyword: subject, pass: "yt_channels" });
+    // Pass 6: playlists search.
+    plan.push({ url: `https://www.youtube.com/results?search_query=${encodeURIComponent(subject)}&sp=EgIQAw%253D%253D`, matchedKeyword: subject, pass: "yt_playlists" });
+    // Pass 7-11: Google site:youtube.com keyword searches.
+    for (const suf of GOOGLE_SUFFIXES) {
+      const q = suf ? `site:youtube.com "${subject}" ${suf}` : `site:youtube.com "${subject}"`;
+      plan.push({ url: google(q), matchedKeyword: `google:${suf || "base"}`, pass: "google_site" });
+    }
+    // Pass 12: regional language Google searches.
+    for (const suf of ["malayalam", "tamil", "hindi", "ട്രോൾ", "வைரல்", "वायरल"]) {
+      plan.push({ url: google(`site:youtube.com "${subject}" ${suf}`), matchedKeyword: `google:${suf}`, pass: "google_regional" });
+    }
+    // Pass 13: year-by-year historical discovery (each on YouTube + DuckDuckGo fallback).
+    for (const year of YEAR_SUFFIXES) {
+      plan.push({ url: ytSearch(`${subject} ${year}`, SORT_MODES[1].sp), matchedKeyword: `${subject} ${year}`, pass: "yt_year" });
+      plan.push({ url: ddg(`site:youtube.com "${subject}" ${year}`), matchedKeyword: `ddg:${year}`, pass: "ddg_year" });
+    }
+    // Pass 14: mobile YouTube relevance — different layout often surfaces extras.
+    plan.push({ url: mYtSearch(subject, ""), matchedKeyword: subject, pass: "myt" });
+
+    // ---------- Execute plan with bounded concurrency, no early break ----------
     const allCandidates = new Map<string, Candidate>();
     const errors: string[] = [];
-    const BATCH = 4;
-    const MAX_QUERIES = 14; // cap Firecrawl spend; covers core English+regional set
-    const chosen = queries.slice(0, MAX_QUERIES);
+    const passStats: Record<string, number> = {};
+    const CONCURRENCY = 6;
+    const HARD_CAP = 800; // ceiling on candidates per scan
     let rankCursor = 0;
+    let planIdx = 0;
 
-    for (let i = 0; i < chosen.length; i += BATCH) {
-      const slice = chosen.slice(i, i + BATCH);
-      await Promise.all(slice.map(async (q) => {
-        const sources = [
-          `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`,
-          `https://m.youtube.com/results?search_query=${encodeURIComponent(q)}`,
-          `https://www.google.com/search?q=${encodeURIComponent(`site:youtube.com "${subject}" ${q.replace(subject, "").trim()}`)}`,
-          `https://duckduckgo.com/html/?q=${encodeURIComponent(`site:youtube.com ${q}`)}`,
-        ];
-        for (const url of sources) {
-          try {
-            const html = await firecrawlHtml(apiKey, url, url.includes("youtube.com") ? 4500 : 2500);
-            const found = collectYouTubeCandidates(html, q, rankCursor);
-            rankCursor += found.length;
-            let addedFromSource = 0;
-            for (const c of found) {
-              if (!allCandidates.has(c.videoId)) { allCandidates.set(c.videoId, c); addedFromSource++; }
-            }
-            if (addedFromSource > 0) break; // got results from this source, move on
-          } catch (e: any) {
-            errors.push(`${q}: ${e?.message || e}`);
+    async function worker() {
+      while (true) {
+        const i = planIdx++;
+        if (i >= plan.length) return;
+        if (allCandidates.size >= HARD_CAP) return;
+        const task = plan[i];
+        try {
+          const html = await firecrawlHtml(apiKey, task.url, task.url.includes("youtube.com") ? 4500 : 2500);
+          const found = collectYouTubeCandidates(html, task.matchedKeyword, rankCursor);
+          rankCursor += found.length;
+          let added = 0;
+          for (const c of found) {
+            if (!allCandidates.has(c.videoId)) { allCandidates.set(c.videoId, c); added++; }
+            if (allCandidates.size >= HARD_CAP) break;
           }
+          passStats[task.pass] = (passStats[task.pass] ?? 0) + added;
+        } catch (e: any) {
+          errors.push(`${task.pass} [${task.matchedKeyword}]: ${e?.message || e}`);
         }
-      }));
-      if (allCandidates.size >= 60) break;
+      }
     }
+    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
-    const candidates = Array.from(allCandidates.values()).slice(0, 60);
-
+    const candidates = Array.from(allCandidates.values());
     if (candidates.length === 0) {
       return {
-        inserted: 0, query: subject,
-        note: `No YouTube results from ${chosen.length} keyword variants for "${subject}". ${errors[0] ?? "YouTube/Google may be temporarily blocking the scrape."}`,
+        inserted: 0, new_count: 0, total: 0, query: subject,
+        passes_run: plan.length, pass_stats: passStats,
+        note: `No YouTube results from ${plan.length} discovery passes for "${subject}". ${errors[0] ?? "YouTube/Google may be temporarily blocking the scrape."}`,
       };
     }
 
-    // Score on keyword + metadata only — visual verification is deferred.
-    const rows = candidates.map((c) => {
+    // ---------- Incremental dedup against existing rows ----------
+    // Pull existing video IDs for this asset so we never reprocess duplicates
+    // and existing historical rows stay intact.
+    const { data: existingRows } = await supabase
+      .from("discovered_matches")
+      .select("video_id")
+      .eq("user_id", userId)
+      .eq("asset_id", assetId)
+      .eq("discovered_via", "youtube_firecrawl_ai_verified");
+    const existing = new Set((existingRows ?? []).map((r: any) => r.video_id).filter(Boolean));
+
+    const fresh = candidates.filter((c) => !existing.has(c.videoId));
+
+    // Score and prepare insert rows for NEW candidates only.
+    const rows = fresh.map((c) => {
       const textSignal = textSignalScore(c.title, c.channel, subject);
       const subjectInTitle = c.title.toLowerCase().includes(subject.toLowerCase());
       const keywordScore = subjectInTitle ? 100 : 40;
-      const rankProxy = Math.max(30, 95 - c.rank * 1.5);
+      const rankProxy = Math.max(30, 95 - c.rank * 0.5);
       const cls = categorizeFromTitle(c.title, c.channel);
-      // 30% keyword, 20% text relevance, 15% rank/recency proxy, 15% thumb (later), 20% face (later)
-      // Pre-verification cap at 69 so verified faces can push >70.
       const preFinal = Math.min(
         69,
         Math.round(keywordScore * 0.3 + textSignal * 0.2 + rankProxy * 0.15),
@@ -292,27 +352,37 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         discovered_via: "youtube_firecrawl_ai_verified",
         result_category: resultCategory,
         is_owned: false,
-        notes: `KEYWORD:${c.matchedKeyword} | TYPE:${cls.risk} | Surfaced from search "${c.matchedKeyword}". Visual face verification pending — click Verify Face to confirm.`,
+        notes: `KEYWORD:${c.matchedKeyword} | TYPE:${cls.risk} | NEW_DISCOVERY | Visual face verification pending — click Verify Face to confirm.`,
       };
     });
 
-    // Replace prior pending matches for this scope; keep escalated ones.
-    let del = supabase.from("discovered_matches").delete()
-      .eq("user_id", userId)
-      .eq("discovered_via", "youtube_firecrawl_ai_verified")
-      .neq("status", "escalated");
-    if (assetId) del = del.eq("asset_id", assetId);
-    else del = del.is("asset_id", null);
-    await del;
+    let insertedCount = 0;
+    if (rows.length) {
+      // Chunk inserts so a single huge payload doesn't hit body limits.
+      const CHUNK = 200;
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const slice = rows.slice(i, i + CHUNK);
+        const { data: ins, error: insErr } = await supabase
+          .from("discovered_matches").insert(slice).select("id");
+        if (insErr) throw insErr;
+        insertedCount += ins?.length ?? 0;
+      }
+    }
 
-    const { data: inserted, error: insErr } = await supabase
-      .from("discovered_matches").insert(rows).select("*");
-    if (insErr) throw insErr;
     return {
-      inserted: inserted?.length ?? 0, query: subject,
-      variants: chosen.length, errors: errors.slice(0, 3),
+      inserted: insertedCount,
+      new_count: insertedCount,
+      total: existing.size + insertedCount,
+      duplicates_skipped: candidates.length - fresh.length,
+      candidates_found: candidates.length,
+      query: subject,
+      passes_run: plan.length,
+      pass_stats: passStats,
+      variants: keywordQueries.length,
+      errors: errors.slice(0, 3),
     };
   });
+
 
 // On-demand face/content verification for a single discovered match.
 // Runs the Gemini multimodal comparison and updates the row in place.
