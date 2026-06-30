@@ -1,8 +1,27 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { encryptToken } from "@/lib/youtube-connect.functions";
+import { createFileRoute } from "@tanstack/react-router";
 
 // Public OAuth callback — Google posts ?code=...&state=<userId>.<returnTo>
 // Exchanges code for tokens, fetches channel info, stores encrypted tokens.
+
+async function getKey(): Promise<CryptoKey> {
+  const secret =
+    process.env.YOUTUBE_OAUTH_ENCRYPTION_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    "eterna-ai-fallback-key-please-set";
+  const raw = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret));
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+async function encryptToken(plain: string): Promise<string> {
+  const key = await getKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const enc = new Uint8Array(
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plain)),
+  );
+  const out = new Uint8Array(iv.length + enc.length);
+  out.set(iv, 0);
+  out.set(enc, iv.length);
+  return btoa(String.fromCharCode(...out));
+}
 
 async function exchangeCode(code: string, redirectUri: string) {
   const res = await fetch("https://oauth2.googleapis.com/token", {
@@ -22,7 +41,6 @@ async function exchangeCode(code: string, redirectUri: string) {
     refresh_token?: string;
     expires_in: number;
     scope: string;
-    id_token?: string;
   }>;
 }
 
@@ -51,21 +69,20 @@ export const Route = createFileRoute("/api/public/youtube-oauth-callback")({
         const url = new URL(request.url);
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state") ?? "";
-        const error = url.searchParams.get("error");
+        const errorParam = url.searchParams.get("error");
         const origin = `${url.protocol}//${url.host}`;
         const redirectUri = `${origin}/api/public/youtube-oauth-callback`;
         const [userId, ...rest] = state.split(".");
         const returnTo = rest.join(".") || "/takedown";
 
-        const back = (status: string) => {
-          throw redirect({ to: returnTo as any, search: { yt: status } as any });
-        };
+        const back = (status: string) =>
+          Response.redirect(`${origin}${returnTo}?yt=${encodeURIComponent(status)}`, 302);
 
-        if (error) back(`error_${error}`);
-        if (!code || !userId) back("missing_code");
+        if (errorParam) return back(`error_${errorParam}`);
+        if (!code || !userId) return back("missing_code");
 
         try {
-          const tokens = await exchangeCode(code!, redirectUri);
+          const tokens = await exchangeCode(code, redirectUri);
           const info = await fetchUserInfo(tokens.access_token);
           const channel = await fetchPrimaryChannel(tokens.access_token);
 
@@ -76,7 +93,7 @@ export const Route = createFileRoute("/api/public/youtube-oauth-callback")({
 
           await supabaseAdmin.from("youtube_connections").upsert(
             {
-              user_id: userId!,
+              user_id: userId,
               google_account_id: info?.sub ?? null,
               email: info?.email ?? null,
               youtube_channel_id: channel?.id ?? null,
@@ -92,12 +109,11 @@ export const Route = createFileRoute("/api/public/youtube-oauth-callback")({
             { onConflict: "user_id" },
           );
 
-          back("connected");
+          return back("connected");
         } catch (e) {
           console.error("[youtube-oauth-callback]", e);
-          back("exchange_failed");
+          return back("exchange_failed");
         }
-        return new Response("ok");
       },
     },
   },
