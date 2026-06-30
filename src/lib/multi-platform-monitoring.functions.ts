@@ -178,7 +178,23 @@ async function redditNativeSearch(subject: string, limit = 25): Promise<SearchHi
   return dedup;
 }
 
-    // Fan out one Firecrawl search per platform in parallel.
+export const runMultiPlatformScan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => ScanInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    if (!apiKey) throw new Error("Firecrawl is not connected. Link the Firecrawl connector and retry.");
+
+    const subject = data.query.trim();
+    const assetId = data.assetId ?? null;
+
+    if (assetId) {
+      const { data: asset } = await supabase.from("assets").select("id,user_id").eq("id", assetId).maybeSingle();
+      if (!asset || asset.user_id !== userId) throw new Error("Asset not found");
+    }
+
+    // Fan out one search per platform in parallel.
     const perPlatform = await Promise.all(PLATFORMS.map(async (p) => {
       // Reddit: use native sorted-by-new JSON endpoint for accurate latest results.
       if (p.id === "Reddit") {
