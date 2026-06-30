@@ -209,7 +209,17 @@ function BrowserAgentPage() {
 
               {/* Evidence */}
               <div className="rounded-xl border border-border bg-card">
-                <div className="border-b border-border p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2"><FileText className="h-3 w-3" /> Evidence ({evidence.length})</div>
+                <div className="border-b border-border p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <FileText className="h-3 w-3" /> Evidence ({evidence.length})
+                  {evidence.length > 0 && (
+                    <button
+                      onClick={() => downloadEvidence(selectedCase, evidence, contacts, emails)}
+                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] font-medium normal-case tracking-normal hover:bg-accent"
+                    >
+                      <Download className="h-3 w-3" /> Download Bundle
+                    </button>
+                  )}
+                </div>
                 {evidence.length === 0 ? <div className="p-4 text-xs text-muted-foreground">No evidence captured. Click "Browse & Capture Evidence".</div> : (
                   <ul className="divide-y divide-border max-h-[260px] overflow-y-auto">
                     {evidence.map((e) => (
