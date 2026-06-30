@@ -337,7 +337,7 @@ export const verifyYouTubeMatch = createServerFn({ method: "POST" })
               `Return same_person_or_content=true only when face/content clearly matches. ` +
               `Then classify violation_category and fair_use_flag.` },
             { type: "file", data: new URL(signed.signedUrl), mediaType: "image" },
-            { type: "file", data: new URL(match.preview_url), mediaType: "image" },
+            { type: "file", data: new URL(String(match.preview_url ?? "")), mediaType: "image" },
           ],
         }],
       });
