@@ -57,17 +57,24 @@ function decodeHtml(value: string): string {
 }
 
 // English keyword pool. Each query becomes `${subject} ${suffix}`.
+// Latest-intent suffixes go first so date-filtered passes prioritize them.
 const ENGLISH_SUFFIXES = [
-  "", "reaction", "troll", "issue", "controversy", "exposed", "viral", "roast",
-  "news", "latest issue", "family issue", "interview reaction", "shorts",
-  "reels reaction", "fan video", "edit", "fake news", "leaked", "scandal",
-  "Malayalam troll", "Malayalam reaction", "Tamil reaction", "Tamil troll",
+  "latest", "news", "today", "this week", "breaking news", "latest video",
+  "latest news", "viral", "trending",
+  "", "reaction", "troll", "issue", "controversy", "exposed", "expose",
+  "roast", "interview", "commentary", "review", "podcast", "livestream",
+  "shorts", "fan video", "edit", "fake news", "leaked", "scandal",
+  "Malayalam troll", "Malayalam reaction", "Malayalam news",
+  "Tamil reaction", "Tamil troll", "Tamil news",
   "Hindi reaction", "Hindi news",
 ];
 
 // Regional keyword cues. If the subject contains non-Latin characters we also
 // append these. Users can also paste a native-script name directly as subject.
-const MALAYALAM_SUFFIXES = ["ട്രോൾ", "പ്രശ്നം", "വാർത്ത", "വിവാദം", "റിയാക്ഷൻ", "വൈറൽ", "ഫാൻസ്", "വീഡിയോ"];
+const MALAYALAM_SUFFIXES = [
+  "വാർത്ത", "ട്രോൾ", "വിവാദം", "പ്രശ്നം", "വൈറൽ",
+  "റിയാക്ഷൻ", "ഫാൻസ്", "വീഡിയോ", "ഇന്ന്", "ബ്രേക്കിംഗ്",
+];
 
 function isNonLatin(s: string) { return /[^\u0000-\u024F]/.test(s); }
 
