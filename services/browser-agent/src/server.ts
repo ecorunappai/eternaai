@@ -12,9 +12,11 @@ import { investigateYouTube } from "./agents/youtube.agent.js";
 import { investigateInstagram } from "./agents/instagram.agent.js";
 import { discoverContacts } from "./agents/contact.agent.js";
 import { captureEvidence } from "./agents/evidence.agent.js";
+import { enqueue, approve as approveTask, cancel as cancelTask } from "./tasks/queue.js";
+import { getTask, listTasks, subscribe } from "./tasks/store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const EVIDENCE_DIR = path.resolve(__dirname, "../evidence");
+const EVIDENCE_DIR = path.resolve(process.env.AGENT_DATA_DIR ?? path.resolve(__dirname, ".."), "evidence");
 const PORT = Number(process.env.PORT ?? 8090);
 const TOKEN = process.env.BROWSER_AGENT_TOKEN ?? "";
 const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? `http://localhost:${PORT}`;
@@ -129,6 +131,75 @@ app.post("/capture-evidence", async (req, res) => {
   } catch (e) {
     res.status(500).json({ status: "error", error: (e as Error).message });
   }
+});
+
+// ====================================================================
+// Task-based operator API
+// ====================================================================
+
+const TaskSchema = z.object({
+  type: z.enum([
+    "youtube.investigate",
+    "instagram.investigate",
+    "contact.discover",
+    "email.prepare",
+    "takedown.prepare",
+  ]),
+  input: z.record(z.any()).default({}),
+  caseId: z.string().optional(),
+});
+
+app.post("/tasks", (req, res) => {
+  const p = TaskSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.message });
+  const task = enqueue({
+    type: p.data.type,
+    input: p.data.input,
+    caseId: p.data.caseId,
+    getBrowser,
+    evidenceDir: EVIDENCE_DIR,
+    publicBaseUrl: PUBLIC_BASE_URL,
+  });
+  res.json({ status: "queued", task });
+});
+
+app.get("/tasks", (_req, res) => res.json({ tasks: listTasks(200) }));
+
+app.get("/tasks/:id", (req, res) => {
+  const t = getTask(req.params.id);
+  if (!t) return res.status(404).json({ error: "not_found" });
+  res.json({ task: t });
+});
+
+app.post("/tasks/:id/approve", (req, res) => {
+  const t = approveTask(req.params.id);
+  if (!t) return res.status(404).json({ error: "not_found" });
+  res.json({ task: t });
+});
+
+app.post("/tasks/:id/cancel", (req, res) => {
+  const t = cancelTask(req.params.id);
+  if (!t) return res.status(404).json({ error: "not_found" });
+  res.json({ task: t });
+});
+
+// Server-Sent Events live stream
+app.get("/tasks/:id/events", (req, res) => {
+  const t = getTask(req.params.id);
+  if (!t) return res.status(404).end();
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders?.();
+  res.write(`data: ${JSON.stringify(t)}\n\n`);
+  const unsub = subscribe(req.params.id, (next) => {
+    res.write(`data: ${JSON.stringify(next)}\n\n`);
+  });
+  const ping = setInterval(() => res.write(`: ping\n\n`), 15000);
+  req.on("close", () => { clearInterval(ping); unsub(); });
 });
 
 app.listen(PORT, () => {
