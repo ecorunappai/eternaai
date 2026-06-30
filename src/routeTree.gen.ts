@@ -19,6 +19,7 @@ import { Route as IdentityRouteImport } from './routes/identity'
 import { Route as EnforcementRouteImport } from './routes/enforcement'
 import { Route as EliteRouteImport } from './routes/elite'
 import { Route as CertificatesRouteImport } from './routes/certificates'
+import { Route as BrowserAgentRouteImport } from './routes/browser-agent'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
@@ -75,6 +76,11 @@ const CertificatesRoute = CertificatesRouteImport.update({
   path: '/certificates',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BrowserAgentRoute = BrowserAgentRouteImport.update({
+  id: '/browser-agent',
+  path: '/browser-agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -105,6 +111,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
+  '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
+  '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
@@ -140,6 +148,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
+  '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/'
     | '/assistant'
     | '/auth'
+    | '/browser-agent'
     | '/certificates'
     | '/elite'
     | '/enforcement'
@@ -176,6 +186,7 @@ export interface FileRouteTypes {
     | '/'
     | '/assistant'
     | '/auth'
+    | '/browser-agent'
     | '/certificates'
     | '/elite'
     | '/enforcement'
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/'
     | '/assistant'
     | '/auth'
+    | '/browser-agent'
     | '/certificates'
     | '/elite'
     | '/enforcement'
@@ -211,6 +223,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AssistantRoute: typeof AssistantRoute
   AuthRoute: typeof AuthRoute
+  BrowserAgentRoute: typeof BrowserAgentRoute
   CertificatesRoute: typeof CertificatesRoute
   EliteRoute: typeof EliteRoute
   EnforcementRoute: typeof EnforcementRoute
@@ -297,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CertificatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/browser-agent': {
+      id: '/browser-agent'
+      path: '/browser-agent'
+      fullPath: '/browser-agent'
+      preLoaderRoute: typeof BrowserAgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -339,6 +359,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AssistantRoute: AssistantRoute,
   AuthRoute: AuthRoute,
+  BrowserAgentRoute: BrowserAgentRoute,
   CertificatesRoute: CertificatesRoute,
   EliteRoute: EliteRoute,
   EnforcementRoute: EnforcementRoute,

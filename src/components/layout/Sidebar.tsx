@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, ShieldCheck, FileStack, ScanSearch, AlertOctagon, Gavel, Award, Crown, Sparkles, Settings, LogOut, Youtube } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, FileStack, ScanSearch, AlertOctagon, Gavel, Award, Crown, Sparkles, Settings, LogOut, Youtube, Bot } from "lucide-react";
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ const primary: NavItem[] = [
   { to: "/youtube", label: "YouTube Monitor", icon: Youtube },
   { to: "/violations", label: "Violations", icon: AlertOctagon },
   { to: "/enforcement", label: "Enforcement", icon: Gavel },
+  { to: "/browser-agent", label: "AI Browser Agent", icon: Bot },
   { to: "/certificates", label: "Certificates", icon: Award },
   { to: "/identity", label: "Digital Identity", icon: ShieldCheck },
 ];
