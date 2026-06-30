@@ -111,6 +111,17 @@ function categorizeFromTitle(title: string, channel: string): { category: string
   return { category: "thumbnail_misuse", fairUse: "needs_legal_review", risk: "Fair Use / Needs Review" };
 }
 
+function resultCategoryFromSignals(title: string, channel: string, matchedKeyword: string): string {
+  const t = `${title} ${channel} ${matchedKeyword}`.toLowerCase();
+  if (/(deepfake|ai generated|ai-generated|fake video|fake celebrity|impersonat)/.test(t)) return "impersonation";
+  if (/(reaction|reacts|reacting|റിയാക്ഷൻ)/.test(t)) return "reaction";
+  if (/(troll|roast|meme|ട്രോൾ)/.test(t)) return "troll";
+  if (/(news|commentary|വാർത്ത|latest issue|controversy|issue|exposed|scandal)/.test(t)) return "news";
+  if (/(full video|reupload|repost|leaked|without permission)/.test(t)) return "reupload";
+  if (/(fan ?page|fanclub|fans|tribute|edit|status|ഫാൻസ്)/.test(t)) return "fan";
+  return "needs_review";
+}
+
 function collectYouTubeCandidates(html: string, matchedKeyword: string, startRank: number): Candidate[] {
   const out: Map<string, Candidate> = new Map();
   const videoRegex = /"videoId":"([A-Za-z0-9_-]{11})"[^]*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
@@ -262,6 +273,7 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         Math.round(keywordScore * 0.3 + textSignal * 0.2 + rankProxy * 0.15),
       );
       const risk = preFinal >= 60 ? "possible" : "review";
+      const resultCategory = resultCategoryFromSignals(c.title, c.channel, c.matchedKeyword);
       return {
         asset_id: assetId,
         user_id: userId,
@@ -278,6 +290,8 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         match_type: c.isShort ? "youtube_short" : "youtube_video",
         status: "pending",
         discovered_via: "youtube_firecrawl_ai_verified",
+        result_category: resultCategory,
+        is_owned: false,
         notes: `KEYWORD:${c.matchedKeyword} | TYPE:${cls.risk} | Surfaced from search "${c.matchedKeyword}". Visual face verification pending — click Verify Face to confirm.`,
       };
     });
