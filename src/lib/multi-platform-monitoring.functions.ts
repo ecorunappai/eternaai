@@ -209,11 +209,17 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => ScanInput.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const apiKey = process.env.FIRECRAWL_API_KEY;
-    if (!apiKey) throw new Error("Firecrawl is not connected. Link the Firecrawl connector and retry.");
+    const searxBase = process.env.SEARXNG_BASE_URL?.trim();
+    const searxBearer = process.env.SEARXNG_BEARER?.trim() || undefined;
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY?.trim();
+
+    if (!searxBase && !firecrawlKey) {
+      throw new Error("SearXNG search engine is offline. Please start Docker service and set SEARXNG_BASE_URL (see /services/README.md).");
+    }
 
     const subject = data.query.trim();
     const assetId = data.assetId ?? null;
+    const source: "searxng" | "firecrawl" = searxBase ? "searxng" : "firecrawl";
 
     if (assetId) {
       const { data: asset } = await supabase.from("assets").select("id,user_id").eq("id", assetId).maybeSingle();
@@ -222,12 +228,15 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
 
     // Fan out one search per platform in parallel.
     const perPlatform = await Promise.all(PLATFORMS.map(async (p) => {
-      // Reddit: use native sorted-by-new JSON endpoint for accurate latest results.
+      // Reddit: always use native sorted-by-new JSON endpoint for most accurate fresh results.
       if (p.id === "Reddit") {
         const hits = await redditNativeSearch(subject, 25);
         return { platform: p, hits };
       }
-      const hits = await firecrawlSearch(apiKey, p.buildQuery(subject), 10);
+      const query = p.buildQuery(subject);
+      const hits = source === "searxng"
+        ? await searxngSearch(searxBase!, searxBearer, query, 12)
+        : await firecrawlSearch(firecrawlKey!, query, 10);
       const filtered = hits.filter((h) => p.urlFilter(h.url));
       return { platform: p, hits: filtered };
     }));
@@ -235,6 +244,7 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
     const seen = new Set<string>();
     const rows: any[] = [];
     const counters: Record<string, number> = {};
+    const discoveredVia = source === "searxng" ? "multi_platform_searxng" : "multi_platform_firecrawl";
 
     for (const { platform, hits } of perPlatform) {
       counters[platform.id] = 0;
@@ -270,8 +280,8 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
           risk_level: risk,
           match_type: platform.matchType,
           status: "pending",
-          discovered_via: "multi_platform_firecrawl",
-          notes: `PLATFORM:${platform.id} | PROFILE:${profileUrl ?? ""} | SOURCE:${host} | ${String(h.description ?? "").slice(0, 240)}`,
+          discovered_via: discoveredVia,
+          notes: `SOURCE:${source} | PLATFORM:${platform.id} | PROFILE:${profileUrl ?? ""} | HOST:${host} | ${String(h.description ?? "").slice(0, 220)}`,
         });
         counters[platform.id]++;
       }
@@ -280,7 +290,7 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
     // Replace previous multi-platform pending matches for this scope, keep escalated.
     let del = supabase.from("discovered_matches").delete()
       .eq("user_id", userId)
-      .eq("discovered_via", "multi_platform_firecrawl")
+      .in("discovered_via", ["multi_platform_searxng", "multi_platform_firecrawl"])
       .neq("status", "escalated");
     if (assetId) del = del.eq("asset_id", assetId); else del = del.is("asset_id", null);
     await del;
@@ -292,5 +302,6 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
       inserted = ins?.length ?? 0;
     }
 
-    return { inserted, query: subject, counters, platforms: PLATFORMS.length };
+    return { inserted, query: subject, counters, platforms: PLATFORMS.length, source };
   });
+
