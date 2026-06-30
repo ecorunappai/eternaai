@@ -30,6 +30,7 @@ type Candidate = {
   publishedText?: string;
   recencyHours?: number;
   viewCount?: number;
+  discoveryWindow?: "today" | "week" | "month" | "historical";
 };
 
 const VerificationSchema = z.object({
@@ -139,7 +140,10 @@ function resultCategoryFromSignals(title: string, channel: string, _matchedKeywo
 // "1 month ago", "Streamed 5 days ago" into approximate hours-since-upload.
 function parsePublishedAgo(text: string | undefined): number | undefined {
   if (!text) return undefined;
-  const m = /(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*ago/i.exec(text);
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (/\b(just now|today|live now|premieres? now)\b/i.test(normalized)) return 1;
+  if (/\byesterday\b/i.test(normalized)) return 24;
+  const m = /(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*ago/i.exec(normalized);
   if (!m) return undefined;
   const n = parseInt(m[1], 10);
   const unit = m[2].toLowerCase();
@@ -159,8 +163,54 @@ function parseViewCount(text: string | undefined): number | undefined {
   return Math.round(n * mult);
 }
 
+function decodeEscapedJsonText(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return decodeHtml(value.replace(/\\n/g, " ").replace(/\\"/g, '"')).trim();
+}
+
+function extractVideoId(url: string | undefined): { id: string; isShort: boolean } | null {
+  if (!url) return null;
+  const decoded = decodeURIComponent(url);
+  const patterns: Array<[RegExp, boolean]> = [
+    [/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/, false],
+    [/youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/, true],
+    [/\/watch\?v=([A-Za-z0-9_-]{11})/, false],
+    [/\/shorts\/([A-Za-z0-9_-]{11})/, true],
+  ];
+  for (const [re, isShort] of patterns) {
+    const m = re.exec(decoded);
+    if (m?.[1]) return { id: m[1], isShort };
+  }
+  return null;
+}
+
+function recencyFromDiscoveryWindow(window: Candidate["discoveryWindow"]): number | undefined {
+  if (window === "today") return 12;
+  if (window === "week") return 24 * 3;
+  if (window === "month") return 24 * 14;
+  return undefined;
+}
+
+function mergeCandidate(current: Candidate, incoming: Candidate): Candidate {
+  return {
+    ...current,
+    title: current.title.startsWith("YouTube video ") || current.title.startsWith("YouTube Short ") ? incoming.title : current.title,
+    channel: current.channel === "YouTube" || current.channel === "Unknown channel" || current.channel === "YouTube Shorts" ? incoming.channel : current.channel,
+    publishedText: current.publishedText ?? incoming.publishedText,
+    recencyHours: current.recencyHours ?? incoming.recencyHours,
+    viewCount: current.viewCount ?? incoming.viewCount,
+    discoveryWindow: current.discoveryWindow ?? incoming.discoveryWindow,
+    matchedKeyword: current.matchedKeyword || incoming.matchedKeyword,
+  };
+}
+
 function collectYouTubeCandidates(html: string, matchedKeyword: string, startRank: number): Candidate[] {
   const out: Map<string, Candidate> = new Map();
+  const add = (c: Candidate) => {
+    const prev = out.get(c.videoId);
+    out.set(c.videoId, prev ? mergeCandidate(prev, c) : c);
+  };
+  const rendererRegex = /"videoRenderer":\{"videoId":"([A-Za-z0-9_-]{11})"/g;
   const videoRegex = /"videoId":"([A-Za-z0-9_-]{11})"[^]*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
   const ownerRegex = /"ownerText":\{"runs":\[\{"text":"([^"]+)"/;
   const longByline = /"longBylineText":\{"runs":\[\{"text":"([^"]+)"/;
@@ -172,6 +222,27 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
 
   let m: RegExpExecArray | null;
   let rank = startRank;
+  while ((m = rendererRegex.exec(html)) !== null) {
+    const id = m[1];
+    const tail = html.slice(m.index, m.index + 9000);
+    const title = decodeEscapedJsonText(
+      /"title":\{"runs":\[\{"text":"([^"]+)"/.exec(tail)?.[1]
+      ?? /"title":\{"simpleText":"([^"]+)"/.exec(tail)?.[1]
+      ?? /"accessibilityData":\{"label":"([^"]+)"/.exec(tail)?.[1]?.split(" by ")[0]
+    ) ?? `YouTube video ${id}`;
+    const channel = decodeEscapedJsonText(ownerRegex.exec(tail)?.[1] ?? longByline.exec(tail)?.[1]) ?? "Unknown channel";
+    const publishedText = decodeEscapedJsonText(publishedRegex.exec(tail)?.[1]);
+    const vcRaw = viewCountRegex.exec(tail);
+    const viewText = decodeEscapedJsonText(vcRaw?.[1] ?? vcRaw?.[2] ?? shortViewRegex.exec(tail)?.[1]);
+    add({
+      videoId: id, url: `https://www.youtube.com/watch?v=${id}`,
+      thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+      title, channel,
+      isShort: false, rank: rank++, matchedKeyword,
+      publishedText, recencyHours: parsePublishedAgo(publishedText),
+      viewCount: parseViewCount(viewText),
+    });
+  }
   while ((m = videoRegex.exec(html)) !== null) {
     const id = m[1];
     if (out.has(id)) continue;
@@ -180,7 +251,7 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
     const publishedText = publishedRegex.exec(tail)?.[1];
     const vcRaw = viewCountRegex.exec(tail);
     const viewText = vcRaw?.[1] ?? vcRaw?.[2] ?? shortViewRegex.exec(tail)?.[1];
-    out.set(id, {
+    add({
       videoId: id, url: `https://www.youtube.com/watch?v=${id}`,
       thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
       title: decodeHtml(m[2]), channel: decodeHtml(channel),
@@ -193,7 +264,7 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
     while ((m = re.exec(html)) !== null) {
       const id = m[1];
       if (out.has(id)) continue;
-      out.set(id, {
+      add({
         videoId: id, url: `https://www.youtube.com/shorts/${id}`,
         thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
         title: decodeHtml(m[2]), channel: "YouTube Shorts",
@@ -213,7 +284,7 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
       while ((m = re.exec(html)) !== null) {
         const id = m[1];
         if (out.has(id)) continue;
-        out.set(id, {
+        add({
           videoId: id,
           url: isShort ? `https://www.youtube.com/shorts/${id}` : `https://www.youtube.com/watch?v=${id}`,
           thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
@@ -222,6 +293,37 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
         });
       }
     }
+  }
+  return Array.from(out.values()).sort((a, b) => a.rank - b.rank);
+}
+
+function collectYouTubeCandidatesFromSearch(results: any[], matchedKeyword: string, startRank: number, discoveryWindow?: Candidate["discoveryWindow"]): Candidate[] {
+  const out = new Map<string, Candidate>();
+  let rank = startRank;
+  for (const r of results) {
+    const url = String(r?.url || r?.link || "");
+    const parsed = extractVideoId(url);
+    if (!parsed || out.has(parsed.id)) continue;
+    const title = decodeHtml(String(r?.title || r?.metadata?.title || `${parsed.isShort ? "YouTube Short" : "YouTube video"} ${parsed.id}`));
+    const description = decodeHtml(String(r?.description || r?.snippet || r?.metadata?.description || ""));
+    const text = `${title} ${description}`;
+    const publishedText = /(just now|today|yesterday|\d+\s*(?:second|minute|hour|day|week|month|year)s?\s*ago)/i.exec(text)?.[0]
+      ?? (discoveryWindow ? `within ${discoveryWindow}` : undefined);
+    const recencyHours = parsePublishedAgo(publishedText) ?? recencyFromDiscoveryWindow(discoveryWindow);
+    out.set(parsed.id, {
+      videoId: parsed.id,
+      url: parsed.isShort ? `https://www.youtube.com/shorts/${parsed.id}` : `https://www.youtube.com/watch?v=${parsed.id}`,
+      thumb: `https://i.ytimg.com/vi/${parsed.id}/hqdefault.jpg`,
+      title,
+      channel: String(r?.metadata?.siteName || r?.metadata?.author || "YouTube"),
+      isShort: parsed.isShort,
+      rank: rank++,
+      matchedKeyword,
+      publishedText,
+      recencyHours,
+      viewCount: parseViewCount(text),
+      discoveryWindow,
+    });
   }
   return Array.from(out.values()).sort((a, b) => a.rank - b.rank);
 }
