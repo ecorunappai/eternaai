@@ -42,16 +42,37 @@ type StoryboardSpec = {
   templateLevel: number;  // L0/L1/L2
 };
 
-async function firecrawlHtml(apiKey: string, url: string, waitFor = 4500): Promise<string> {
+async function firecrawlHtmlOnce(apiKey: string, url: string, waitFor: number, timeout: number): Promise<{ ok: boolean; status: number; html: string }> {
   const r = await fetch("https://api.firecrawl.dev/v2/scrape", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ url, formats: ["html"], onlyMainContent: false, waitFor, timeout: 45000 }),
+    body: JSON.stringify({ url, formats: ["html"], onlyMainContent: false, waitFor, timeout }),
   });
-  if (!r.ok) throw new Error(`Firecrawl ${r.status}`);
-  const j: any = await r.json();
+  if (!r.ok) return { ok: false, status: r.status, html: "" };
+  const j: any = await r.json().catch(() => ({}));
   const p = j?.data ?? j;
-  return typeof p?.html === "string" ? p.html : "";
+  return { ok: true, status: 200, html: typeof p?.html === "string" ? p.html : "" };
+}
+
+async function firecrawlHtml(apiKey: string, url: string, _waitFor = 4500): Promise<string> {
+  // Try desktop fast, then mobile fallback (lighter page), then desktop with longer wait.
+  const mobile = url.replace("www.youtube.com", "m.youtube.com");
+  const attempts: Array<{ u: string; w: number; t: number }> = [
+    { u: url,    w: 2500, t: 30000 },
+    { u: mobile, w: 2500, t: 30000 },
+    { u: url,    w: 4000, t: 45000 },
+  ];
+  let lastStatus = 0;
+  for (const a of attempts) {
+    try {
+      const res = await firecrawlHtmlOnce(apiKey, a.u, a.w, a.t);
+      if (res.ok && res.html) return res.html;
+      lastStatus = res.status || lastStatus;
+    } catch {
+      // network blip — try next attempt
+    }
+  }
+  throw new Error(`YouTube page could not be fetched (Firecrawl ${lastStatus || "timeout"}). Try again in a moment or switch to the external worker.`);
 }
 
 // Parse playerStoryboardSpecRenderer from a watch-page HTML.
