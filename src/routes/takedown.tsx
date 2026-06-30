@@ -297,6 +297,88 @@ function TakedownPage() {
                 </div>
               ) : null}
 
+              {/* ---------- YouTube Reporting ---------- */}
+              <div className="rounded-md border bg-red-500/5 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="grid h-8 w-8 place-items-center rounded-md bg-red-600 text-white"><Youtube className="h-4 w-4" /></div>
+                    <div>
+                      <div className="text-sm font-semibold">YouTube Reporting</div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {yt?.connection?.status === "connected"
+                          ? <>Connected as <span className="font-medium">{yt.connection.youtube_channel_title || yt.connection.email}</span></>
+                          : "Connect your Google/YouTube account to file the report yourself"}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="rounded-full px-2.5 py-1 text-[11px] font-medium bg-background border">{ytStatusLabel}</span>
+                </div>
+
+                {!yt?.oauthConfigured && (
+                  <div className="text-[11px] text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1.5 flex gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Google OAuth not configured — Connect button is disabled. Use Open Reporting Assistant for the fallback flow (form opens in new tab with prepared evidence).
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {yt?.connection?.status !== "connected" ? (
+                    <button
+                      onClick={onConnectYt}
+                      disabled={!yt?.oauthConfigured || ytBusy === "connect"}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-red-600 text-white px-3 py-1.5 text-xs hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {ytBusy === "connect" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+                      Connect YouTube Account
+                    </button>
+                  ) : (
+                    <button
+                      onClick={onDisconnectYt}
+                      disabled={ytBusy === "disconnect"}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 text-destructive px-3 py-1.5 text-xs hover:bg-destructive/10 disabled:opacity-50"
+                    >
+                      {ytBusy === "disconnect" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
+                      Disconnect Account
+                    </button>
+                  )}
+
+                  <button
+                    onClick={onPrepareYtReport}
+                    disabled={(active.missing_fields?.length ?? 0) > 0 || ytBusy === "prepare"}
+                    className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+                  >
+                    {ytBusy === "prepare" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                    Prepare Report
+                  </button>
+
+                  <button
+                    onClick={openYtAssistant}
+                    disabled={!active.youtube_report_payload}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs disabled:opacity-50"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Open Reporting Assistant
+                  </button>
+
+                  {active.youtube_report_status === "waiting_user_review" && (
+                    <button
+                      onClick={onMarkYtSubmitted}
+                      disabled={ytBusy === "submitted"}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 text-emerald-700 px-3 py-1.5 text-xs hover:bg-emerald-500/10 disabled:opacity-50"
+                    >
+                      {ytBusy === "submitted" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                      I&apos;ve Submitted It
+                    </button>
+                  )}
+                </div>
+
+                {active.youtube_report_payload && (
+                  <details className="rounded border bg-background/60">
+                    <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Prepared report — review before submit</summary>
+                    <pre className="p-3 text-[11px] whitespace-pre-wrap max-h-64 overflow-auto">{JSON.stringify(active.youtube_report_payload, null, 2)}</pre>
+                  </details>
+                )}
+              </div>
+
               <div className="flex flex-wrap gap-2 pt-2 border-t">
                 <button
                   type="button"
