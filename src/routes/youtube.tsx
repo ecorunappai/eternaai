@@ -291,7 +291,10 @@ function YouTubeDash() {
                         {Number(m.ai_score ?? 0) === 0 && (
                           <span className="rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold">Needs Visual Review</span>
                         )}
-                        <span className="ml-auto text-xs text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                        {m.discovered_via === "multi_platform_searxng" && (
+                          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"><Search className="h-3 w-3" />Source: SearXNG</span>
+                        )}
+                        <span className={`${m.discovered_via === "multi_platform_searxng" ? "" : "ml-auto"} text-xs text-muted-foreground`}>{new Date(m.created_at).toLocaleDateString()}</span>
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
