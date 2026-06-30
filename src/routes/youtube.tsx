@@ -28,10 +28,10 @@ const FAIR_USE_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 const TABS: Array<{ id: string; label: string }> = [
-  { id: "latest", label: "Latest (Newest First)" },
-  { id: "last_24h", label: "Last 24h" },
+  { id: "latest", label: "Priority Latest" },
+  { id: "last_24h", label: "Today / 24h" },
   { id: "last_7d", label: "Last 7 Days" },
-  { id: "last_30d", label: "Last 30 Days" },
+  { id: "last_30d", label: "This Month" },
   { id: "trending", label: "Trending Today" },
   { id: "news", label: "Latest News" },
   { id: "breaking_news", label: "Breaking News" },
@@ -118,14 +118,33 @@ function YouTubeDash() {
   const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }, []);
   const now = Date.now();
 
-  // Sort all matches newest-first using published_at when available, falling
-  // back to created_at. This is the canonical ordering for every tab so old
-  // videos never appear above fresh uploads.
+  function getPublishedMs(m: any): number {
+    if (m.published_at) return new Date(m.published_at).getTime();
+    const h = m.recency_hours != null ? Number(m.recency_hours) : null;
+    return h != null ? now - h * 3600_000 : 0;
+  }
+
+  function latestPriority(m: any): number {
+    const h = m.recency_hours != null ? Number(m.recency_hours) : (m.published_at ? (now - new Date(m.published_at).getTime()) / 3600_000 : null);
+    if (h != null && h <= 24) return 5;
+    if (h != null && h <= 24 * 7) return 4;
+    if (h != null && h <= 24 * 30) return 3;
+    if (h != null) return 2;
+    return 1;
+  }
+
+  // Sort all matches by real upload recency first. Unknown/stale rows are pushed
+  // below Today / Week / This Month, so newly discovered issues match YouTube's
+  // live results instead of old database insertion order.
   const matchesSorted = useMemo(() => {
     return [...matches].sort((a, b) => {
-      const ap = a.published_at ? new Date(a.published_at).getTime() : 0;
-      const bp = b.published_at ? new Date(b.published_at).getTime() : 0;
+      const freshDelta = latestPriority(b) - latestPriority(a);
+      if (freshDelta !== 0) return freshDelta;
+      const ap = getPublishedMs(a);
+      const bp = getPublishedMs(b);
       if (ap !== bp) return bp - ap;
+      const trendDelta = Number(b.trending_score ?? 0) - Number(a.trending_score ?? 0);
+      if (trendDelta !== 0) return trendDelta;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   }, [matches]);
@@ -182,11 +201,12 @@ function YouTubeDash() {
 
   const visible = useMemo(() => {
     let list = matchesSorted;
-    if (tab === "all" || tab === "latest") return list;
+    if (tab === "all") return list;
+    if (tab === "latest") return list.filter(m => { const h = hoursSinceUpload(m); return h == null || h <= 24 * 30; });
     if (tab === "last_24h") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24; });
     if (tab === "last_7d") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24 * 7; });
     if (tab === "last_30d") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24 * 30; });
-    if (tab === "trending") return [...list].sort((a, b) => Number(b.trending_score ?? 0) - Number(a.trending_score ?? 0)).filter(m => Number(m.trending_score ?? 0) >= 40);
+    if (tab === "trending") return [...list].sort((a, b) => Number(b.trending_score ?? 0) - Number(a.trending_score ?? 0)).filter(m => Number(m.trending_score ?? 0) >= 40 && (hoursSinceUpload(m) ?? 9999) <= 24 * 30);
     if (tab === "historical") return list.filter(m => { const h = hoursSinceUpload(m); return h == null || h > 24 * 90; });
     if (tab === "official") return list.filter(m => m.is_owned || m.result_category === "official");
     if (TAG_TABS.has(tab)) return list.filter(m => Array.isArray(m.content_tags) && m.content_tags.includes(tab) && !m.is_owned);
