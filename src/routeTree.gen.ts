@@ -25,6 +25,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
+import { Route as AssetIdRouteImport } from './routes/asset.$id'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
 const YoutubeRoute = YoutubeRouteImport.update({
@@ -107,6 +108,11 @@ const VerifyCertIdRoute = VerifyCertIdRouteImport.update({
   path: '/verify/$certId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AssetIdRoute = AssetIdRouteImport.update({
+  id: '/asset/$id',
+  path: '/asset/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
@@ -130,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
+  '/asset/$id': typeof AssetIdRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRoutesByTo {
@@ -149,6 +156,7 @@ export interface FileRoutesByTo {
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
+  '/asset/$id': typeof AssetIdRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRoutesById {
@@ -169,6 +177,7 @@ export interface FileRoutesById {
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
+  '/asset/$id': typeof AssetIdRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRouteTypes {
@@ -190,6 +199,7 @@ export interface FileRouteTypes {
     | '/violations'
     | '/youtube'
     | '/api/chat'
+    | '/asset/$id'
     | '/verify/$certId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -209,6 +219,7 @@ export interface FileRouteTypes {
     | '/violations'
     | '/youtube'
     | '/api/chat'
+    | '/asset/$id'
     | '/verify/$certId'
   id:
     | '__root__'
@@ -228,6 +239,7 @@ export interface FileRouteTypes {
     | '/violations'
     | '/youtube'
     | '/api/chat'
+    | '/asset/$id'
     | '/verify/$certId'
   fileRoutesById: FileRoutesById
 }
@@ -248,6 +260,7 @@ export interface RootRouteChildren {
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
   ApiChatRoute: typeof ApiChatRoute
+  AssetIdRoute: typeof AssetIdRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
 }
 
@@ -365,6 +378,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyCertIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/asset/$id': {
+      id: '/asset/$id'
+      path: '/asset/$id'
+      fullPath: '/asset/$id'
+      preLoaderRoute: typeof AssetIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/chat': {
       id: '/api/chat'
       path: '/api/chat'
@@ -392,6 +412,7 @@ const rootRouteChildren: RootRouteChildren = {
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
   ApiChatRoute: ApiChatRoute,
+  AssetIdRoute: AssetIdRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
 }
 export const routeTree = rootRouteImport

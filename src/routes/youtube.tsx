@@ -90,6 +90,15 @@ function YouTubeDash() {
   }
   useEffect(() => { if (user) load(); }, [user]);
 
+  // Auto-load monitoring profile when asset changes (so user doesn't re-type the name)
+  useEffect(() => {
+    if (!selectedAsset) return;
+    (async () => {
+      const { data } = await supabase.from("monitoring_profiles").select("creator_name").eq("asset_id", selectedAsset).maybeSingle();
+      if (data?.creator_name && !query) setQuery(data.creator_name);
+    })();
+  }, [selectedAsset]);
+
   const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }, []);
 
   const counts = useMemo(() => {

@@ -510,6 +510,80 @@ export type Database = {
           },
         ]
       }
+      monitoring_profiles: {
+        Row: {
+          aliases: string[] | null
+          asset_id: string | null
+          auto_scan: boolean | null
+          brand_name: string | null
+          created_at: string
+          creator_name: string
+          id: string
+          keywords: string[] | null
+          last_scan_at: string | null
+          official_instagram_url: string | null
+          official_youtube_url: string | null
+          original_source_url: string | null
+          owner_name: string | null
+          platforms: string[] | null
+          regional_name: string | null
+          scan_frequency: string | null
+          status: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          aliases?: string[] | null
+          asset_id?: string | null
+          auto_scan?: boolean | null
+          brand_name?: string | null
+          created_at?: string
+          creator_name: string
+          id?: string
+          keywords?: string[] | null
+          last_scan_at?: string | null
+          official_instagram_url?: string | null
+          official_youtube_url?: string | null
+          original_source_url?: string | null
+          owner_name?: string | null
+          platforms?: string[] | null
+          regional_name?: string | null
+          scan_frequency?: string | null
+          status?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          aliases?: string[] | null
+          asset_id?: string | null
+          auto_scan?: boolean | null
+          brand_name?: string | null
+          created_at?: string
+          creator_name?: string
+          id?: string
+          keywords?: string[] | null
+          last_scan_at?: string | null
+          official_instagram_url?: string | null
+          official_youtube_url?: string | null
+          original_source_url?: string | null
+          owner_name?: string | null
+          platforms?: string[] | null
+          regional_name?: string | null
+          scan_frequency?: string | null
+          status?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monitoring_profiles_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       original_videos: {
         Row: {
           channel_name: string | null
