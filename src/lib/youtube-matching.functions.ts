@@ -420,6 +420,26 @@ async function firecrawlHtml(apiKey: string, url: string, waitFor = 2500): Promi
   return "";
 }
 
+async function firecrawlSearchResults(apiKey: string, query: string, tbs?: string, limit = 25): Promise<any[]> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 18000);
+    const r = await fetch("https://api.firecrawl.dev/v2/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ query, limit, tbs, timeout: 16000 }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!r.ok) return [];
+    const j: any = await r.json();
+    const arr = j?.data?.web ?? j?.data ?? j?.web ?? [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
 // YouTube search sort tokens (`&sp=...`). Encoded values match the actual
 // filter chip URLs YouTube generates when you pick "Sort by".
 const SORT_MODES: Array<{ label: string; sp: string }> = [
@@ -437,7 +457,7 @@ const DATE_FILTERS: Array<{ label: string; sp: string }> = [
 const YEAR_SUFFIXES = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
 const GOOGLE_SUFFIXES = ["", "reaction", "troll", "issue", "controversy", "exposed", "scandal", "interview", "news", "podcast", "livestream"];
 // Recency intent keywords appended to date-filtered passes so the news/commentary tab refreshes.
-const RECENT_INTENT = ["", "news", "latest", "today", "controversy", "reaction", "troll", "interview", "viral"];
+const RECENT_INTENT = ["", "latest", "today", "news", "breaking news", "controversy", "issue", "reaction", "troll", "expose", "viral", "commentary", "Malayalam news", "Malayalam troll"];
 
 export const runYouTubeScan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -459,7 +479,7 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     const keywordQueries = expandQueries(subject);
 
     // ---------- Build the deep multi-pass URL plan ----------
-    type SourceTask = { url: string; matchedKeyword: string; pass: string };
+    type SourceTask = { url?: string; searchQuery?: string; tbs?: string; matchedKeyword: string; pass: string; discoveryWindow?: Candidate["discoveryWindow"] };
     const plan: SourceTask[] = [];
     const ytSearch = (q: string, sp: string) =>
       `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}${sp ? `&sp=${sp}` : ""}`;
@@ -467,6 +487,21 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       `https://m.youtube.com/results?search_query=${encodeURIComponent(q)}${sp ? `&sp=${sp}` : ""}`;
     const google = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}&num=50`;
     const ddg = (q: string) => `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+
+    // Priority live search passes. Firecrawl Search supports true time filters;
+    // these are inserted before scrape-based discovery so Today / This Month
+    // results are created with real recency metadata first.
+    const liveWindows: Array<{ label: "today" | "this_week" | "this_month"; tbs: string; window: Candidate["discoveryWindow"] }> = [
+      { label: "today", tbs: "qdr:d", window: "today" },
+      { label: "this_week", tbs: "qdr:w", window: "week" },
+      { label: "this_month", tbs: "qdr:m", window: "month" },
+    ];
+    for (const win of liveWindows) {
+      for (const intent of RECENT_INTENT.slice(0, 12)) {
+        const q = intent ? `${subject} ${intent} site:youtube.com` : `${subject} site:youtube.com`;
+        plan.push({ searchQuery: q, tbs: win.tbs, matchedKeyword: intent ? `${subject} ${intent}` : subject, pass: `firecrawl_${win.label}`, discoveryWindow: win.window });
+      }
+    }
 
     // Pass 1-3: per-keyword × relevance/date/views (covers latest + old + popular).
     const KEYWORD_CAP = 8;
@@ -481,7 +516,8 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     for (const df of DATE_FILTERS) {
       for (const intent of RECENT_INTENT) {
         const q = intent ? `${subject} ${intent}` : subject;
-        plan.unshift({ url: ytSearch(q, df.sp), matchedKeyword: q, pass: `yt_${df.label}` });
+        const discoveryWindow = df.label === "today" ? "today" : df.label === "this_week" ? "week" : "month";
+        plan.unshift({ url: ytSearch(q, df.sp), matchedKeyword: q, pass: `yt_${df.label}`, discoveryWindow });
       }
     }
     // Pass 4: shorts-only filter on the base subject + top intent keywords.
@@ -549,12 +585,16 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         const task = plan[i];
         lastPass = task.pass;
         try {
-          const html = await firecrawlHtml(fcKey, task.url, task.url.includes("youtube.com") ? 3500 : 2000);
-          const found = collectYouTubeCandidates(html, task.matchedKeyword, rankCursor);
+          const found = task.searchQuery
+            ? collectYouTubeCandidatesFromSearch(await firecrawlSearchResults(fcKey, task.searchQuery, task.tbs), task.matchedKeyword, rankCursor, task.discoveryWindow)
+            : collectYouTubeCandidates(await firecrawlHtml(fcKey, task.url!, task.url!.includes("youtube.com") ? 3500 : 2000), task.matchedKeyword, rankCursor)
+                .map((c) => ({ ...c, discoveryWindow: c.discoveryWindow ?? task.discoveryWindow, recencyHours: c.recencyHours ?? recencyFromDiscoveryWindow(task.discoveryWindow) }));
           rankCursor += found.length;
           let added = 0;
           for (const c of found) {
-            if (!allCandidates.has(c.videoId)) { allCandidates.set(c.videoId, c); added++; }
+            const prev = allCandidates.get(c.videoId);
+            if (prev) allCandidates.set(c.videoId, mergeCandidate(prev, c));
+            else { allCandidates.set(c.videoId, c); added++; }
             if (allCandidates.size >= HARD_CAP) break;
           }
           passStats[task.pass] = (passStats[task.pass] ?? 0) + added;
