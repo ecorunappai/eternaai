@@ -183,6 +183,7 @@ Return ONLY JSON: {"description":"...","legal_declaration":"...","risk_warnings"
       warning_email_id: warning?.id ?? null,
       warning_sent_at: warning?.approved_at ?? warning?.created_at ?? null,
       response_deadline: warning ? new Date(Date.now() + (warning.deadline_hours ?? 72) * 3600 * 1000).toISOString() : null,
+      notes: warningSkipped ? contactNotes.join("\n") : null,
     }).select("*").maybeSingle();
     if (error) throw error;
 
