@@ -58,6 +58,7 @@ function YouTubeDash() {
   const [selectedAsset, setSelectedAsset] = useState<string>("");
   const [query, setQuery] = useState<string>("");
   const [filter, setFilter] = useState<string>("all");
+  const [platformFilter, setPlatformFilter] = useState<string>("All");
   const [scanning, setScanning] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [gatheringId, setGatheringId] = useState<string | null>(null);
@@ -74,7 +75,7 @@ function YouTubeDash() {
     const [a, m] = await Promise.all([
       supabase.from("assets").select("id,title,asset_type,storage_path").eq("asset_type", "image").order("created_at", { ascending: false }),
       supabase.from("discovered_matches").select("*")
-        .in("discovered_via", ["youtube_firecrawl_ai_verified", "multi_platform_firecrawl"])
+        .in("discovered_via", ["youtube_firecrawl_ai_verified", "multi_platform_firecrawl", "multi_platform_searxng"])
         .order("created_at", { ascending: false }),
     ]);
     const list = a.data ?? [];
