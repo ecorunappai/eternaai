@@ -14,8 +14,17 @@ function Verify() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from("certificates").select("*, assets(title, asset_type, sha256, created_at)").eq("certificate_number", certId).maybeSingle()
-      .then(({ data }) => { setCert(data); setLoading(false); });
+    supabase.rpc("verify_certificate", { _cert_number: certId })
+      .then(({ data }) => {
+        const row = Array.isArray(data) ? data[0] : null;
+        setCert(row ? {
+          certificate_number: row.certificate_number,
+          owner_name: row.owner_name,
+          issued_at: row.issued_at,
+          assets: { title: row.asset_title, asset_type: row.asset_type, sha256: row.asset_sha256 },
+        } : null);
+        setLoading(false);
+      });
   }, [certId]);
 
   return (
