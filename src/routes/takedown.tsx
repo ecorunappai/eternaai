@@ -135,6 +135,17 @@ function TakedownPage() {
 
   const active = useMemo(() => takedowns.find((t) => t.id === activeId), [takedowns, activeId]);
 
+  const ytStatusLabel = (() => {
+    if (!yt?.connection || yt.connection.status !== "connected") return "Not Connected";
+    if (!active) return "Connected";
+    if (active.youtube_report_status === "submitted" || active.status === "submitted") return "Submitted";
+    if (active.youtube_report_status === "waiting_user_review") return "Waiting User Review";
+    if (active.youtube_report_status === "prepared") return "Report Prepared";
+    if ((active.evidence_urls?.length ?? 0) > 0) return "Evidence Ready";
+    return "Connected";
+  })();
+
+
   async function onPrepare() {
     if (!selectedCaseId) return toast.error("Select an enforcement case first");
     if (!form.rightsOwnerName || !form.rightsOwnerEmail) return toast.error("Rights owner name + email required");
