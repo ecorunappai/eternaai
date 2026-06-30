@@ -155,6 +155,14 @@ function Matching() {
                     {scanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
                     Verified Scan
                   </button>
+                  <button
+                    disabled={allScanning === a.id}
+                    onClick={() => onSearchEverywhere(a.id)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-semibold text-foreground hover:bg-accent disabled:opacity-50"
+                  >
+                    {allScanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Globe className="h-3 w-3" />}
+                    Search Everywhere
+                  </button>
                 </div>
               </div>
             ))}
