@@ -214,6 +214,7 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const apiKey = process.env.FIRECRAWL_API_KEY;
     if (!apiKey) throw new Error("Firecrawl is not connected. Link the Firecrawl connector and retry.");
+    const fcKey: string = apiKey;
 
     let assetId: string;
     {
