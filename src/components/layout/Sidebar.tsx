@@ -12,7 +12,7 @@ const primary: NavItem[] = [
   { to: "/registry", label: "Content Registry", icon: FileStack },
   { to: "/monitoring", label: "AI Monitoring", icon: ScanSearch },
   { to: "/matching", label: "Matching Engine", icon: ScanSearch },
-  { to: "/youtube", label: "YouTube Monitor", icon: Youtube },
+  { to: "/youtube", label: "Monitoring", icon: Youtube },
   { to: "/violations", label: "Violations", icon: AlertOctagon },
   { to: "/enforcement", label: "Enforcement", icon: Gavel },
   { to: "/takedown", label: "Takedown Center", icon: Gavel },

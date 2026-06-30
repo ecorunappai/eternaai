@@ -1,0 +1,225 @@
+// Eterna AI — multi-platform monitoring discovery.
+// One scan = parallel Firecrawl searches across Instagram, Facebook, TikTok, X,
+// Reddit, websites, news, blogs (YouTube handled by youtube-matching).
+// Results are normalised into the existing `discovered_matches` table so the
+// monitoring dashboard, violations and case-flow keep working unchanged.
+import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { z } from "zod";
+
+const ScanInput = z.object({
+  assetId: z.string().uuid().optional().nullable(),
+  query: z.string().trim().min(2).max(120),
+});
+
+// Suffix set requested by Eterna ops — covers the most common abuse vectors.
+const SUFFIXES = ["", "latest", "viral", "troll", "reaction", "expose", "controversy"];
+
+type PlatformDef = {
+  id: string;            // canonical platform label stored in DB
+  label: string;
+  domain: string;        // primary domain (for `domain` column)
+  // Build the Firecrawl search query for this platform.
+  buildQuery: (subject: string) => string;
+  // Restrict accepted result URLs.
+  urlFilter: (url: string) => boolean;
+  matchType: string;
+};
+
+const PLATFORMS: PlatformDef[] = [
+  {
+    id: "Instagram", label: "Instagram", domain: "instagram.com", matchType: "instagram_post",
+    buildQuery: (s) => `site:instagram.com "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    urlFilter: (u) => /(^|\.)instagram\.com\//i.test(u),
+  },
+  {
+    id: "Facebook", label: "Facebook", domain: "facebook.com", matchType: "facebook_post",
+    buildQuery: (s) => `site:facebook.com "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    urlFilter: (u) => /(^|\.)facebook\.com\//i.test(u),
+  },
+  {
+    id: "TikTok", label: "TikTok", domain: "tiktok.com", matchType: "tiktok_post",
+    buildQuery: (s) => `site:tiktok.com "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    urlFilter: (u) => /(^|\.)tiktok\.com\//i.test(u),
+  },
+  {
+    id: "X", label: "X / Twitter", domain: "x.com", matchType: "x_post",
+    buildQuery: (s) => `(site:x.com OR site:twitter.com) "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    urlFilter: (u) => /(^|\.)(x|twitter)\.com\//i.test(u),
+  },
+  {
+    id: "Reddit", label: "Reddit", domain: "reddit.com", matchType: "reddit_post",
+    buildQuery: (s) => `site:reddit.com "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    urlFilter: (u) => /(^|\.)reddit\.com\//i.test(u),
+  },
+  {
+    id: "Website", label: "Website", domain: "", matchType: "website",
+    buildQuery: (s) => `"${s}" (${SUFFIXES.filter(Boolean).join(" OR ")}) -site:youtube.com -site:instagram.com -site:facebook.com -site:tiktok.com -site:x.com -site:twitter.com -site:reddit.com`,
+    urlFilter: (u) => /^https?:\/\//i.test(u),
+  },
+  {
+    id: "News", label: "News", domain: "", matchType: "news_article",
+    buildQuery: (s) => `"${s}" news (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    urlFilter: (u) => /^https?:\/\//i.test(u),
+  },
+  {
+    id: "Blog", label: "Blog", domain: "", matchType: "blog_post",
+    buildQuery: (s) => `"${s}" blog (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    urlFilter: (u) => /^https?:\/\//i.test(u),
+  },
+];
+
+const RISK_KEYWORDS: Record<string, number> = {
+  expose: 22, exposed: 22, troll: 18, controversy: 18, leaked: 24, scandal: 22,
+  reaction: 14, roast: 16, viral: 8, "fake news": 20, deepfake: 26,
+  reupload: 22, repost: 18, latest: 6, news: 6, nude: 28, uncensored: 22,
+};
+
+function scoreText(title: string, snippet: string, subject: string): number {
+  const lower = `${title} ${snippet}`.toLowerCase();
+  const subjLower = subject.toLowerCase();
+  let s = 0;
+  if (lower.includes(subjLower)) s += 35;
+  for (const [k, w] of Object.entries(RISK_KEYWORDS)) if (lower.includes(k)) s += w;
+  return Math.min(100, s);
+}
+
+function classify(title: string, snippet: string): { category: string; fairUse: string } {
+  const t = `${title} ${snippet}`.toLowerCase();
+  if (/(deepfake|ai[- ]generated|fake video)/.test(t)) return { category: "deepfake_ai_misuse", fairUse: "high_confidence_unauthorized" };
+  if (/(expose|scandal|leaked|nude|private)/.test(t)) return { category: "defamatory_content", fairUse: "defamation_risk" };
+  if (/(troll|roast|meme)/.test(t)) return { category: "defamatory_content", fairUse: "needs_legal_review" };
+  if (/(reaction|reacts|review|commentary)/.test(t)) return { category: "reaction_video", fairUse: "possible_fair_use" };
+  if (/(news|article|controversy)/.test(t)) return { category: "defamatory_content", fairUse: "needs_legal_review" };
+  if (/(reupload|repost|full video)/.test(t)) return { category: "unauthorized_reupload", fairUse: "clear_reupload" };
+  return { category: "thumbnail_misuse", fairUse: "needs_legal_review" };
+}
+
+function profileUrlFor(platform: string, url: string): string | null {
+  try {
+    const u = new URL(url);
+    const seg = u.pathname.split("/").filter(Boolean);
+    if (platform === "Instagram" && seg[0]) return `https://www.instagram.com/${seg[0]}/`;
+    if (platform === "TikTok") {
+      const handle = seg.find((s) => s.startsWith("@"));
+      if (handle) return `https://www.tiktok.com/${handle}`;
+    }
+    if (platform === "X") {
+      if (seg[0] && !["i", "search"].includes(seg[0])) return `https://${u.host}/${seg[0]}`;
+    }
+    if (platform === "Facebook" && seg[0]) return `https://www.facebook.com/${seg[0]}`;
+    if (platform === "Reddit" && seg[0] === "r" && seg[1]) return `https://www.reddit.com/r/${seg[1]}/`;
+    return `${u.protocol}//${u.host}`;
+  } catch { return null; }
+}
+
+type SearchHit = { url: string; title: string; description?: string };
+
+async function firecrawlSearch(apiKey: string, query: string, limit = 10): Promise<SearchHit[]> {
+  try {
+    const r = await fetch("https://api.firecrawl.dev/v2/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ query, limit, sources: ["web", "news"] }),
+    });
+    if (!r.ok) return [];
+    const j: any = await r.json();
+    const data = j?.data ?? j;
+    const out: SearchHit[] = [];
+    const push = (arr: any[]) => {
+      for (const it of arr ?? []) {
+        if (!it?.url) continue;
+        out.push({ url: it.url, title: String(it.title ?? it.url), description: String(it.description ?? it.snippet ?? "") });
+      }
+    };
+    if (Array.isArray(data)) push(data);
+    else { push(data?.web ?? []); push(data?.news ?? []); }
+    return out;
+  } catch { return []; }
+}
+
+export const runMultiPlatformScan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => ScanInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    if (!apiKey) throw new Error("Firecrawl is not connected. Link the Firecrawl connector and retry.");
+
+    const subject = data.query.trim();
+    const assetId = data.assetId ?? null;
+
+    if (assetId) {
+      const { data: asset } = await supabase.from("assets").select("id,user_id").eq("id", assetId).maybeSingle();
+      if (!asset || asset.user_id !== userId) throw new Error("Asset not found");
+    }
+
+    // Fan out one Firecrawl search per platform in parallel.
+    const perPlatform = await Promise.all(PLATFORMS.map(async (p) => {
+      const hits = await firecrawlSearch(apiKey, p.buildQuery(subject), 10);
+      const filtered = hits.filter((h) => p.urlFilter(h.url));
+      return { platform: p, hits: filtered };
+    }));
+
+    const seen = new Set<string>();
+    const rows: any[] = [];
+    const counters: Record<string, number> = {};
+
+    for (const { platform, hits } of perPlatform) {
+      counters[platform.id] = 0;
+      for (const h of hits) {
+        if (seen.has(h.url)) continue;
+        seen.add(h.url);
+        const textSignal = scoreText(h.title, h.description ?? "", subject);
+        const cls = classify(h.title, h.description ?? "");
+        const subjectInTitle = `${h.title} ${h.description}`.toLowerCase().includes(subject.toLowerCase());
+        const keywordScore = subjectInTitle ? 100 : 50;
+        // No visual verification yet — cap to 69 like youtube engine.
+        const preFinal = Math.min(69, Math.round(keywordScore * 0.35 + textSignal * 0.25));
+        const risk = preFinal >= 60 ? "possible" : "review";
+        const profileUrl = profileUrlFor(platform.id, h.url);
+        let host = "";
+        try { host = new URL(h.url).host.replace(/^www\./, ""); } catch { /* noop */ }
+        rows.push({
+          asset_id: assetId,
+          user_id: userId,
+          source_url: h.url,
+          platform: platform.id,
+          domain: host || platform.domain || null,
+          preview_url: null,
+          channel_name: profileUrl ?? host ?? platform.label,
+          video_title: h.title.slice(0, 200),
+          video_id: null,
+          fair_use_flag: cls.fairUse,
+          violation_category: cls.category,
+          phash_score: 0, dhash_score: 0, clip_score: 0,
+          metadata_score: textSignal,
+          ai_score: 0,
+          final_confidence_score: preFinal,
+          risk_level: risk,
+          match_type: platform.matchType,
+          status: "pending",
+          discovered_via: "multi_platform_firecrawl",
+          notes: `PLATFORM:${platform.id} | PROFILE:${profileUrl ?? ""} | SOURCE:${host} | ${String(h.description ?? "").slice(0, 240)}`,
+        });
+        counters[platform.id]++;
+      }
+    }
+
+    // Replace previous multi-platform pending matches for this scope, keep escalated.
+    let del = supabase.from("discovered_matches").delete()
+      .eq("user_id", userId)
+      .eq("discovered_via", "multi_platform_firecrawl")
+      .neq("status", "escalated");
+    if (assetId) del = del.eq("asset_id", assetId); else del = del.is("asset_id", null);
+    await del;
+
+    let inserted = 0;
+    if (rows.length) {
+      const { data: ins, error } = await supabase.from("discovered_matches").insert(rows).select("id");
+      if (error) throw error;
+      inserted = ins?.length ?? 0;
+    }
+
+    return { inserted, query: subject, counters, platforms: PLATFORMS.length };
+  });

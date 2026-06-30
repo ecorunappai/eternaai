@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag, FolderSearch, Mail, AtSign } from "lucide-react";
+import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag, FolderSearch, Mail, AtSign, Globe, Instagram, Facebook, Hash, Newspaper, Rss, MessageSquare } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
@@ -9,13 +9,36 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
 import { runYouTubeScan, verifyYouTubeMatch } from "@/lib/youtube-matching.functions";
+import { runMultiPlatformScan } from "@/lib/multi-platform-monitoring.functions";
 import { createViolationFromMatch } from "@/lib/matching.functions";
 import { openCaseFromMatch, investigateCase, discoverContacts } from "@/lib/browser-agent.functions";
 
 export const Route = createFileRoute("/youtube")({
-  head: () => ({ meta: [{ title: "YouTube Monitoring — Eterna AI" }] }),
+  head: () => ({ meta: [{ title: "Monitoring Dashboard — Eterna AI" }] }),
   component: YouTubeDash,
 });
+
+const PLATFORM_META: Record<string, { Icon: any; color: string; bg: string }> = {
+  YouTube:   { Icon: Youtube,       color: "text-[#FF0000]",      bg: "bg-red-500/10 border-red-500/30" },
+  Instagram: { Icon: Instagram,     color: "text-pink-600",       bg: "bg-pink-500/10 border-pink-500/30" },
+  Facebook:  { Icon: Facebook,      color: "text-blue-600",       bg: "bg-blue-500/10 border-blue-500/30" },
+  TikTok:    { Icon: MessageSquare, color: "text-foreground",     bg: "bg-foreground/10 border-foreground/30" },
+  X:         { Icon: Hash,          color: "text-foreground",     bg: "bg-foreground/10 border-foreground/30" },
+  Reddit:    { Icon: MessageSquare, color: "text-orange-600",     bg: "bg-orange-500/10 border-orange-500/30" },
+  Website:   { Icon: Globe,         color: "text-primary",        bg: "bg-primary/10 border-primary/30" },
+  News:      { Icon: Newspaper,     color: "text-emerald-700",    bg: "bg-emerald-500/10 border-emerald-500/30" },
+  Blog:      { Icon: Rss,           color: "text-amber-700",      bg: "bg-amber-500/10 border-amber-500/30" },
+};
+
+function PlatformBadge({ platform }: { platform: string }) {
+  const meta = PLATFORM_META[platform] ?? PLATFORM_META.Website;
+  const Icon = meta.Icon;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${meta.bg} ${meta.color}`}>
+      <Icon className="h-3 w-3" /> {platform}
+    </span>
+  );
+}
 
 const FAIR_USE_BADGE: Record<string, { label: string; className: string }> = {
   high_confidence_unauthorized: { label: "Unauthorized Use", className: "bg-destructive/10 text-destructive border-destructive/30" },
@@ -40,6 +63,7 @@ function YouTubeDash() {
   const [gatheringId, setGatheringId] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<Record<string, { caseId: string; emails: string[]; socials: { value: string; source_label: string }[]; title?: string; screenshot?: string }>>({});
   const scan = useServerFn(runYouTubeScan);
+  const scanAll = useServerFn(runMultiPlatformScan);
   const verifyFace = useServerFn(verifyYouTubeMatch);
   const escalate = useServerFn(createViolationFromMatch);
   const openCase = useServerFn(openCaseFromMatch);
@@ -49,7 +73,9 @@ function YouTubeDash() {
   async function load() {
     const [a, m] = await Promise.all([
       supabase.from("assets").select("id,title,asset_type,storage_path").eq("asset_type", "image").order("created_at", { ascending: false }),
-      supabase.from("discovered_matches").select("*").eq("discovered_via", "youtube_firecrawl_ai_verified").order("final_confidence_score", { ascending: false }),
+      supabase.from("discovered_matches").select("*")
+        .in("discovered_via", ["youtube_firecrawl_ai_verified", "multi_platform_firecrawl"])
+        .order("created_at", { ascending: false }),
     ]);
     const list = a.data ?? [];
     setAssets(list);
@@ -65,16 +91,35 @@ function YouTubeDash() {
   }
   useEffect(() => { if (user) load(); }, [user]);
 
-  const visible = matches.filter((m) => filter === "all" || m.asset_id === filter);
+  // Sort: newest first, then by final confidence (risk proxy).
+  const sorted = [...matches].sort((a, b) => {
+    const ta = new Date(a.created_at).getTime();
+    const tb = new Date(b.created_at).getTime();
+    if (tb !== ta) return tb - ta;
+    return Number(b.final_confidence_score ?? 0) - Number(a.final_confidence_score ?? 0);
+  });
+  const visible = sorted.filter((m) => filter === "all" || m.asset_id === filter);
+
+  // Per-platform counters across visible results.
+  const counters: Record<string, number> = {};
+  for (const m of visible) {
+    const p = (m.platform ?? "Website") as string;
+    counters[p] = (counters[p] ?? 0) + 1;
+  }
 
   async function onScan() {
-    if (!selectedAsset) return toast.error("Select a registered face/reference image first.");
-    if (!query.trim()) return toast.error("Enter a creator / celebrity name to discover videos.");
+    if (!query.trim()) return toast.error("Enter a creator / brand / subject name to monitor.");
     setScanning(true);
     try {
-      const r = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
-      if (r.inserted === 0) toast.message((r as any).note ?? "No matches");
-      else toast.success(`${r.inserted} suspected videos across ${(r as any).variants ?? 0} keyword variants for "${(r as any).query}"`);
+      // Fan out: YouTube (needs reference image) + all other platforms in parallel.
+      const tasks: Promise<any>[] = [scanAll({ data: { assetId: selectedAsset || null, query: query.trim() } })];
+      if (selectedAsset) tasks.push(scan({ data: { assetId: selectedAsset, query: query.trim() } }));
+      const results = await Promise.allSettled(tasks);
+      const counts = results.map((r) => r.status === "fulfilled" ? (r.value?.inserted ?? 0) : 0);
+      const total = counts.reduce((a, b) => a + b, 0);
+      const errs = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+      if (total === 0) toast.message(errs[0] ? String(errs[0].reason?.message ?? errs[0].reason) : "No new matches surfaced.");
+      else toast.success(`${total} suspected matches across all platforms for "${query.trim()}"`);
       load();
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(false); }
@@ -95,8 +140,7 @@ function YouTubeDash() {
     try {
       const { caseId } = await openCase({ data: { matchId } });
       const inv = await investigate({ data: { caseId } });
-      const contacts = await findContacts({ data: { caseId } });
-      // fetch contact details
+      await findContacts({ data: { caseId } });
       const { data: rows } = await supabase.from("creator_contacts").select("contact_type,value,source_label").eq("case_id", caseId);
       const emails = (rows ?? []).filter(r => r.contact_type === "email").map(r => r.value);
       const socials = (rows ?? []).filter(r => r.contact_type !== "email").map(r => ({ value: r.value, source_label: r.source_label ?? "" }));
@@ -105,6 +149,7 @@ function YouTubeDash() {
     } catch (e) { toast.error((e as Error).message); }
     finally { setGatheringId(null); }
   }
+
 
 
 
@@ -122,42 +167,53 @@ function YouTubeDash() {
   }
 
   return (
-    <AppShell title="YouTube Monitoring">
+    <AppShell title="Monitoring Dashboard">
       <div className="mb-6">
-        <h1 className="font-display text-2xl font-semibold flex items-center gap-2"><Youtube className="h-6 w-6 text-[#FF0000]" /> YouTube Monitoring</h1>
-        <p className="text-sm text-muted-foreground">Detect unauthorized use of your face, photos, or video content across YouTube videos, Shorts, reaction videos and compilations — with fair-use classification.</p>
+        <h1 className="font-display text-2xl font-semibold flex items-center gap-2"><Search className="h-6 w-6 text-primary" /> Monitoring Dashboard</h1>
+        <p className="text-sm text-muted-foreground">One scan, every platform. Eterna fans out keyword + risk-suffix searches across YouTube, Instagram, Facebook, TikTok, X, Reddit, websites, news and blogs and surfaces them here in real time.</p>
       </div>
 
       <div className="mb-6 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center gap-2">
           <Search className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold">Run YouTube Scan</h2>
-          <span className="text-xs text-muted-foreground">Multi-keyword Firecrawl discovery · English + Malayalam/Tamil/Hindi · face verification on demand</span>
+          <h2 className="text-sm font-semibold">Run Monitoring Scan</h2>
+          <span className="text-xs text-muted-foreground">Auto-expanded keywords: latest · viral · troll · reaction · expose · controversy</span>
         </div>
-        {assets.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Register a reference image (face / celebrity photo) in Content Registry first.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-            <label className="block">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Reference image</div>
-              <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">
-                {assets.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Search query (creator / celebrity name)</div>
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Ahaana Krishna" className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" />
-            </label>
-            <button disabled={scanning || !selectedAsset} onClick={onScan} className="inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" style={{ background: "var(--gradient-violet)" }}>
-              {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Youtube className="h-4 w-4" />}
-              Scan YouTube
-            </button>
-          </div>
-        )}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+          <label className="block">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Reference image (optional, enables face verify)</div>
+            <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">
+              <option value="">No reference — search by name only</option>
+              {assets.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Creator / brand / subject name</div>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Ahaana Krishna" className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" />
+          </label>
+          <button disabled={scanning} onClick={onScan} className="inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" style={{ background: "var(--gradient-violet)" }}>
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+            Scan All Platforms
+          </button>
+        </div>
+      </div>
+
+      {/* Platform counters */}
+      <div className="mb-4 grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
+        {Object.keys(PLATFORM_META).map((p) => {
+          const meta = PLATFORM_META[p]; const Icon = meta.Icon;
+          const n = counters[p] ?? 0;
+          return (
+            <div key={p} className={`rounded-lg border p-2 ${meta.bg}`}>
+              <div className={`flex items-center gap-1 text-[10px] uppercase tracking-wider ${meta.color}`}><Icon className="h-3 w-3" /> {p}</div>
+              <div className="text-lg font-bold">{n}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-sm font-semibold">Suspected YouTube Matches</div>
+        <div className="text-sm font-semibold">Suspected Matches · sorted newest first</div>
         <select value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-card px-3 text-sm">
           <option value="all">All assets ({matches.length})</option>
           {assets.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
@@ -168,8 +224,8 @@ function YouTubeDash() {
         {visible.length === 0 ? (
           <div className="py-16 text-center">
             <ShieldAlert className="mx-auto h-10 w-10 text-muted-foreground" />
-            <div className="mt-3 font-medium">No YouTube matches yet</div>
-            <p className="mt-1 text-sm text-muted-foreground">Run a scan to surface suspected videos.</p>
+            <div className="mt-3 font-medium">No matches yet</div>
+            <p className="mt-1 text-sm text-muted-foreground">Run a scan to surface suspected content across every platform.</p>
           </div>
         ) : (
           <ul className="divide-y divide-border">
@@ -177,6 +233,10 @@ function YouTubeDash() {
               const risk = riskBadge(m.risk_level);
               const fair = FAIR_USE_BADGE[m.fair_use_flag ?? "not_applicable"] ?? FAIR_USE_BADGE.not_applicable;
               const assetThumb = thumbs[m.asset_id];
+              const platform = (m.platform ?? "Website") as string;
+              const pmeta = PLATFORM_META[platform] ?? PLATFORM_META.Website;
+              const PIcon = pmeta.Icon;
+              const profileUrl = /PROFILE:([^|]+)/.exec(m.notes ?? "")?.[1]?.trim() || null;
               return (
                 <li key={m.id} className="p-5 hover:bg-accent/20">
                   <div className="flex items-start gap-4">
@@ -188,12 +248,19 @@ function YouTubeDash() {
                         </div>
                       ) : null}
                       <div className="text-center">
-                        <img src={m.preview_url} alt={m.video_title} loading="lazy" className="h-24 w-40 rounded-lg object-cover border border-border bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0.3"; }} />
-                        <div className="mt-1 text-[9px] uppercase tracking-wider text-muted-foreground">{m.match_type === "youtube_short" ? "Short" : "Video"}</div>
+                        {m.preview_url ? (
+                          <img src={m.preview_url} alt={m.video_title} loading="lazy" className="h-24 w-40 rounded-lg object-cover border border-border bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0.3"; }} />
+                        ) : (
+                          <div className={`h-24 w-40 rounded-lg border flex items-center justify-center ${pmeta.bg}`}>
+                            <PIcon className={`h-10 w-10 ${pmeta.color}`} />
+                          </div>
+                        )}
+                        <div className="mt-1 text-[9px] uppercase tracking-wider text-muted-foreground">{platform}</div>
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
+                        <PlatformBadge platform={platform} />
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${risk.className}`}>{risk.label}</span>
                         <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${fair.className}`}><Scale className="h-3 w-3" />{fair.label}</span>
                         {m.violation_category && m.violation_category !== "unrelated" && (
@@ -210,10 +277,15 @@ function YouTubeDash() {
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
-                      <a href={m.source_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      <a href={m.source_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline break-all">
                         <ExternalLink className="h-3 w-3" />{m.source_url}
                       </a>
-                      {m.notes && <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-2">{String(m.notes).replace(/KEYWORD:[^|]+\|\s*/, "")}</span></div>}
+                      {profileUrl && (
+                        <a href={profileUrl} target="_blank" rel="noopener noreferrer" className="mt-1 ml-3 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary hover:underline">
+                          <AtSign className="h-3 w-3" /> Profile · {profileUrl.replace(/^https?:\/\//, "")}
+                        </a>
+                      )}
+                      {m.notes && <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-2">{String(m.notes).replace(/(KEYWORD|PLATFORM|PROFILE|SOURCE):[^|]*\|\s*/g, "")}</span></div>}
                       <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                         <Score label="Face / Visual" v={m.clip_score} />
                         <Score label="AI Verify" v={m.ai_score} />
@@ -239,14 +311,16 @@ function YouTubeDash() {
                       )}
                     </div>
                     <div className="flex flex-col gap-1.5 shrink-0">
-                      <button
-                        disabled={verifyingId === m.id}
-                        onClick={() => onVerifyFace(m.id)}
-                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
-                      >
-                        {verifyingId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanFace className="h-3 w-3" />}
-                        Verify Face
-                      </button>
+                      {platform === "YouTube" && (
+                        <button
+                          disabled={verifyingId === m.id}
+                          onClick={() => onVerifyFace(m.id)}
+                          className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                        >
+                          {verifyingId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanFace className="h-3 w-3" />}
+                          Verify Face
+                        </button>
+                      )}
                       <button
                         disabled={gatheringId === m.id}
                         onClick={() => onGatherEvidence(m.id)}
