@@ -284,7 +284,7 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         if (allCandidates.size >= HARD_CAP) return;
         const task = plan[i];
         try {
-          const html = await firecrawlHtml(apiKey, task.url, task.url.includes("youtube.com") ? 4500 : 2500);
+          const html = await firecrawlHtml(fcKey, task.url, task.url.includes("youtube.com") ? 4500 : 2500);
           const found = collectYouTubeCandidates(html, task.matchedKeyword, rankCursor);
           rankCursor += found.length;
           let added = 0;
