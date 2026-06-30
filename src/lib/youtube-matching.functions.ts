@@ -111,14 +111,17 @@ function categorizeFromTitle(title: string, channel: string): { category: string
   return { category: "thumbnail_misuse", fairUse: "needs_legal_review", risk: "Fair Use / Needs Review" };
 }
 
-function resultCategoryFromSignals(title: string, channel: string, matchedKeyword: string): string {
-  const t = `${title} ${channel} ${matchedKeyword}`.toLowerCase();
-  if (/(deepfake|ai generated|ai-generated|fake video|fake celebrity|impersonat)/.test(t)) return "impersonation";
+function resultCategoryFromSignals(title: string, channel: string, _matchedKeyword: string): string {
+  // Categorize strictly from the actual video title/channel, NOT the search
+  // keyword used to discover it (otherwise every result from the "news" pass
+  // gets tagged as news even when the video itself is unrelated).
+  const t = `${title} ${channel}`.toLowerCase();
+  if (/(deepfake|ai[- ]generated|fake video|fake celebrity|impersonat)/.test(t)) return "impersonation";
   if (/(reaction|reacts|reacting|റിയാക്ഷൻ)/.test(t)) return "reaction";
   if (/(troll|roast|meme|ട്രോൾ)/.test(t)) return "troll";
-  if (/(news|commentary|വാർത്ത|latest issue|controversy|issue|exposed|scandal)/.test(t)) return "news";
+  if (/\b(news|commentary|വാർത്ത|breaking|controversy|exposed|scandal|interview|podcast)\b/.test(t)) return "news";
   if (/(full video|reupload|repost|leaked|without permission)/.test(t)) return "reupload";
-  if (/(fan ?page|fanclub|fans|tribute|edit|status|ഫാൻസ്)/.test(t)) return "fan";
+  if (/(fan ?page|fanclub|fans|tribute|status|ഫാൻസ്)/.test(t)) return "fan";
   return "needs_review";
 }
 
