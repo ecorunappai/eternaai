@@ -156,7 +156,7 @@ function YouTubeDash() {
   }
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: matchesSorted.length, latest: matchesSorted.length };
+    const c: Record<string, number> = { all: matchesSorted.length, latest: 0 };
     let last24 = 0, last7 = 0, last30 = 0, trending = 0, historical = 0;
     for (const m of matchesSorted) {
       const h = hoursSinceUpload(m);
@@ -165,6 +165,7 @@ function YouTubeDash() {
         if (h <= 24 * 7) last7++;
         if (h <= 24 * 30) last30++;
       }
+      if (h == null || h <= 24 * 30) c.latest++;
       if (Number(m.trending_score ?? 0) >= 60) trending++;
       if (h == null || h > 24 * 90) historical++;
       if (m.is_owned || m.result_category === "official") c.official = (c.official ?? 0) + 1;
@@ -200,7 +201,13 @@ function YouTubeDash() {
   }, [matchesSorted, counts]);
 
   const visible = useMemo(() => {
-    let list = matchesSorted;
+    const seen = new Set<string>();
+    let list = matchesSorted.filter((m) => {
+      const key = String(m.video_id || m.source_url || m.id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     if (tab === "all") return list;
     if (tab === "latest") return list.filter(m => { const h = hoursSinceUpload(m); return h == null || h <= 24 * 30; });
     if (tab === "last_24h") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24; });
@@ -425,15 +432,15 @@ function YouTubeDash() {
         <div className="text-xs text-muted-foreground">
           Showing <span className="font-semibold text-foreground">{visible.length.toLocaleString()}</span> result{visible.length === 1 ? "" : "s"} in <span className="font-semibold text-foreground">{TABS.find(t => t.id === tab)?.label}</span>
         </div>
-        {tab === "news" && (
+        {(["latest", "last_24h", "last_7d", "last_30d", "trending", "news"].includes(tab)) && (
           <button
             onClick={onScan}
             disabled={scanning || !selectedAsset || !query.trim()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
-            title="Force a fresh YouTube fetch for news / commentary"
+            title="Force a fresh YouTube fetch for today, this week and this month"
           >
             {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Refresh results
+            Refresh latest
           </button>
         )}
       </div>
@@ -507,7 +514,7 @@ function YouTubeDash() {
                           {m.view_count != null && (
                             <span className="text-[10px] text-muted-foreground">{Number(m.view_count).toLocaleString()} views</span>
                           )}
-                          <span className="text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                          <span className="text-muted-foreground">{m.published_at ? "Uploaded" : "Discovered"} {new Date(m.published_at ?? m.created_at).toLocaleDateString()}</span>
                         </span>
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
