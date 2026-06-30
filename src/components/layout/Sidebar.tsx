@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, ShieldCheck, FileStack, ScanSearch, AlertOctagon, Gavel, Award, Crown, Sparkles, Settings, LogOut, Youtube, Bot, Workflow } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, FileStack, ScanSearch, AlertOctagon, Gavel, Award, Crown, Sparkles, Settings, LogOut, Youtube, Bot, Workflow, CalendarClock } from "lucide-react";
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
