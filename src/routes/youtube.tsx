@@ -55,7 +55,7 @@ function YouTubeDash() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [selectedAsset, setSelectedAsset] = useState<string>("");
   const [query, setQuery] = useState<string>("");
-  const [tab, setTab] = useState<string>("official");
+  const [tab, setTab] = useState<string>("latest");
   const [scanning, setScanning] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [segmentScanId, setSegmentScanId] = useState<string | null>(null);
