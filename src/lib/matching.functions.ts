@@ -131,7 +131,7 @@ async function verifyWithAi(originalUrl: string, candidateUrl: string, candidate
 
   const gateway = createLovableAiGatewayProvider(key);
   const result = await generateText({
-    model: gateway("google/gemini-3-flash-preview"),
+    model: gateway("google/gemini-2.5-flash"),
     output: Output.object({ schema: VerificationSchema }),
     temperature: 0,
     maxRetries: 1,
