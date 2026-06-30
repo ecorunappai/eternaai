@@ -133,7 +133,7 @@ function TakedownPage() {
             </div>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={form.requireWarning} onChange={(e) => setForm({ ...form, requireWarning: e.target.checked })} />
-              Require prior warning email
+              Prefer warning email first (optional — never blocks platform takedown)
             </label>
 
             <button onClick={onPrepare} disabled={preparing} className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground py-2 text-sm font-medium disabled:opacity-60">
