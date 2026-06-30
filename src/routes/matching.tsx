@@ -142,9 +142,13 @@ function Matching() {
               return (
                 <li key={m.id} className="p-5 hover:bg-accent/20">
                   <div className="flex items-start gap-4">
-                    <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
-                      <ImageOff className="h-6 w-6" />
-                    </div>
+                    {thumbs[m.asset_id] ? (
+                      <img src={thumbs[m.asset_id]} alt="match preview" className="h-20 w-20 shrink-0 rounded-lg object-cover border border-border" />
+                    ) : (
+                      <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
+                        <ImageOff className="h-6 w-6" />
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${badge.className}`}>{badge.label}</span>
