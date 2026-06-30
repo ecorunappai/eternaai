@@ -114,7 +114,7 @@ export const runWebScanEverywhere = createServerFn({ method: "POST" })
       while (cursor < plan.length) {
         const i = cursor++;
         const task = plan[i];
-        const results = await firecrawlSearch(apiKey, task.q, 10);
+        const results = await firecrawlSearch(apiKey as string, task.q, 10);
         for (const r of results) {
           const url: string | undefined = r?.url || r?.link;
           if (!url) continue;
