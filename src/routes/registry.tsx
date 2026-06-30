@@ -44,7 +44,8 @@ function Registry() {
     try {
       for (const file of files) {
         const sha = await sha256Hex(file);
-        const path = `${user.id}/${Date.now()}-${file.name}`;
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+        const path = `${user.id}/${Date.now()}-${safeName || "file"}`;
         const { error: upErr } = await supabase.storage.from("assets").upload(path, file);
         if (upErr) throw upErr;
         const type = detectType(file.type);
