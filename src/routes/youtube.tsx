@@ -167,42 +167,53 @@ function YouTubeDash() {
   }
 
   return (
-    <AppShell title="YouTube Monitoring">
+    <AppShell title="Monitoring Dashboard">
       <div className="mb-6">
-        <h1 className="font-display text-2xl font-semibold flex items-center gap-2"><Youtube className="h-6 w-6 text-[#FF0000]" /> YouTube Monitoring</h1>
-        <p className="text-sm text-muted-foreground">Detect unauthorized use of your face, photos, or video content across YouTube videos, Shorts, reaction videos and compilations — with fair-use classification.</p>
+        <h1 className="font-display text-2xl font-semibold flex items-center gap-2"><Search className="h-6 w-6 text-primary" /> Monitoring Dashboard</h1>
+        <p className="text-sm text-muted-foreground">One scan, every platform. Eterna fans out keyword + risk-suffix searches across YouTube, Instagram, Facebook, TikTok, X, Reddit, websites, news and blogs and surfaces them here in real time.</p>
       </div>
 
       <div className="mb-6 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center gap-2">
           <Search className="h-4 w-4 text-primary" />
-          <h2 className="text-sm font-semibold">Run YouTube Scan</h2>
-          <span className="text-xs text-muted-foreground">Multi-keyword Firecrawl discovery · English + Malayalam/Tamil/Hindi · face verification on demand</span>
+          <h2 className="text-sm font-semibold">Run Monitoring Scan</h2>
+          <span className="text-xs text-muted-foreground">Auto-expanded keywords: latest · viral · troll · reaction · expose · controversy</span>
         </div>
-        {assets.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Register a reference image (face / celebrity photo) in Content Registry first.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
-            <label className="block">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Reference image</div>
-              <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">
-                {assets.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-              </select>
-            </label>
-            <label className="block">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Search query (creator / celebrity name)</div>
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Ahaana Krishna" className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" />
-            </label>
-            <button disabled={scanning || !selectedAsset} onClick={onScan} className="inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" style={{ background: "var(--gradient-violet)" }}>
-              {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Youtube className="h-4 w-4" />}
-              Scan YouTube
-            </button>
-          </div>
-        )}
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+          <label className="block">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Reference image (optional, enables face verify)</div>
+            <select value={selectedAsset} onChange={(e) => setSelectedAsset(e.target.value)} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">
+              <option value="">No reference — search by name only</option>
+              {assets.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Creator / brand / subject name</div>
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Ahaana Krishna" className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" />
+          </label>
+          <button disabled={scanning} onClick={onScan} className="inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" style={{ background: "var(--gradient-violet)" }}>
+            {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+            Scan All Platforms
+          </button>
+        </div>
+      </div>
+
+      {/* Platform counters */}
+      <div className="mb-4 grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
+        {Object.keys(PLATFORM_META).map((p) => {
+          const meta = PLATFORM_META[p]; const Icon = meta.Icon;
+          const n = counters[p] ?? 0;
+          return (
+            <div key={p} className={`rounded-lg border p-2 ${meta.bg}`}>
+              <div className={`flex items-center gap-1 text-[10px] uppercase tracking-wider ${meta.color}`}><Icon className="h-3 w-3" /> {p}</div>
+              <div className="text-lg font-bold">{n}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
-        <div className="text-sm font-semibold">Suspected YouTube Matches</div>
+        <div className="text-sm font-semibold">Suspected Matches · sorted newest first</div>
         <select value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-card px-3 text-sm">
           <option value="all">All assets ({matches.length})</option>
           {assets.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
@@ -213,8 +224,8 @@ function YouTubeDash() {
         {visible.length === 0 ? (
           <div className="py-16 text-center">
             <ShieldAlert className="mx-auto h-10 w-10 text-muted-foreground" />
-            <div className="mt-3 font-medium">No YouTube matches yet</div>
-            <p className="mt-1 text-sm text-muted-foreground">Run a scan to surface suspected videos.</p>
+            <div className="mt-3 font-medium">No matches yet</div>
+            <p className="mt-1 text-sm text-muted-foreground">Run a scan to surface suspected content across every platform.</p>
           </div>
         ) : (
           <ul className="divide-y divide-border">
