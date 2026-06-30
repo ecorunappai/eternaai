@@ -11,6 +11,7 @@ const primary: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/registry", label: "Content Registry", icon: FileStack },
   { to: "/monitoring", label: "AI Monitoring", icon: ScanSearch },
+  { to: "/matching", label: "Matching Engine", icon: ScanSearch },
   { to: "/violations", label: "Violations", icon: AlertOctagon },
   { to: "/enforcement", label: "Enforcement", icon: Gavel },
   { to: "/certificates", label: "Certificates", icon: Award },

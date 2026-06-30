@@ -1,10 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Upload, FileStack, Loader2, Trash2, ExternalLink } from "lucide-react";
+import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { hashImageFile, extractVideoKeyframes } from "@/lib/perceptual-hash";
 
 export const Route = createFileRoute("/registry")({
   head: () => ({ meta: [{ title: "Content Registry — Eterna AI" }] }),
@@ -46,13 +47,40 @@ function Registry() {
         const path = `${user.id}/${Date.now()}-${file.name}`;
         const { error: upErr } = await supabase.storage.from("assets").upload(path, file);
         if (upErr) throw upErr;
-        const { error } = await supabase.from("assets").insert({
-          user_id: user.id, title: file.name, asset_type: detectType(file.type),
+        const type = detectType(file.type);
+        let phash: string | null = null, dhash: string | null = null, ahash: string | null = null;
+        let image_metadata: Record<string, unknown> | null = null;
+        let keyframes: Awaited<ReturnType<typeof extractVideoKeyframes>> | null = null;
+        try {
+          if (type === "image") {
+            const h = await hashImageFile(file);
+            phash = h.phash; dhash = h.dhash; ahash = h.ahash;
+            image_metadata = { width: h.width, height: h.height };
+          } else if (type === "video") {
+            keyframes = await extractVideoKeyframes(file);
+            if (keyframes.hashes.length) {
+              phash = keyframes.hashes[0].phash;
+              dhash = keyframes.hashes[0].dhash;
+              image_metadata = { width: keyframes.width, height: keyframes.height, duration: keyframes.duration, keyframes: keyframes.hashes.length };
+            }
+          }
+        } catch (err) { console.warn("fingerprint", err); }
+
+        const { data: inserted, error } = await supabase.from("assets").insert({
+          user_id: user.id, title: file.name, asset_type: type,
           storage_path: path, file_size: file.size, mime_type: file.type, sha256: sha,
-        });
+          phash, dhash, ahash, image_metadata,
+        }).select("id").maybeSingle();
         if (error) throw error;
+
+        if (keyframes && inserted) {
+          await supabase.from("asset_keyframes").insert(keyframes.hashes.map((k) => ({
+            asset_id: inserted.id, user_id: user.id,
+            timestamp_sec: k.timestamp, phash: k.phash,
+          })));
+        }
       }
-      toast.success(`${files.length} asset(s) registered with SHA-256 fingerprint`);
+      toast.success(`${files.length} asset(s) fingerprinted (SHA-256 + perceptual hashes)`);
       load();
     } catch (e) { toast.error((e as Error).message); }
     finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
@@ -110,7 +138,8 @@ function Registry() {
                   <td className="p-3 font-mono text-xs text-muted-foreground">{a.sha256?.slice(0, 16)}…</td>
                   <td className="p-3"><span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">● {a.status}</span></td>
                   <td className="p-3 text-muted-foreground text-xs">{new Date(a.created_at).toLocaleDateString()}</td>
-                  <td className="p-3 text-right">
+                  <td className="p-3 text-right whitespace-nowrap">
+                    <Link to="/matching" className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ScanSearch className="h-3 w-3" />Scan</Link>
                     <button onClick={() => issueCert(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ExternalLink className="h-3 w-3" />Issue cert</button>
                     <button onClick={() => remove(a)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
                   </td>
