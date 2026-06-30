@@ -14,7 +14,7 @@ import {
   browserAgentStatus,
 } from "@/lib/browser-agent-client.functions";
 
-export const Route = createFileRoute("/_authenticated/agent-console")({
+export const Route = createFileRoute("/agent-console")({
   head: () => ({ meta: [{ title: "Agent Console — Eterna AI" }] }),
   component: AgentConsolePage,
 });

@@ -23,11 +23,11 @@ import { Route as CertificatesRouteImport } from './routes/certificates'
 import { Route as BrowserAgentRouteImport } from './routes/browser-agent'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AssistantRouteImport } from './routes/assistant'
+import { Route as AgentConsoleRouteImport } from './routes/agent-console'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
-import { Route as AuthenticatedAgentConsoleRouteImport } from './routes/_authenticated/agent-console'
 import { Route as ApiPublicYoutubeOauthCallbackRouteImport } from './routes/api/public/youtube-oauth-callback'
 
 const YoutubeRoute = YoutubeRouteImport.update({
@@ -100,6 +100,11 @@ const AssistantRoute = AssistantRouteImport.update({
   path: '/assistant',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentConsoleRoute = AgentConsoleRouteImport.update({
+  id: '/agent-console',
+  path: '/agent-console',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -120,12 +125,6 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedAgentConsoleRoute =
-  AuthenticatedAgentConsoleRouteImport.update({
-    id: '/_authenticated/agent-console',
-    path: '/agent-console',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 const ApiPublicYoutubeOauthCallbackRoute =
   ApiPublicYoutubeOauthCallbackRouteImport.update({
     id: '/api/public/youtube-oauth-callback',
@@ -135,6 +134,7 @@ const ApiPublicYoutubeOauthCallbackRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agent-console': typeof AgentConsoleRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
@@ -149,7 +149,6 @@ export interface FileRoutesByFullPath {
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
-  '/agent-console': typeof AuthenticatedAgentConsoleRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
@@ -157,6 +156,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agent-console': typeof AgentConsoleRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
@@ -171,7 +171,6 @@ export interface FileRoutesByTo {
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
-  '/agent-console': typeof AuthenticatedAgentConsoleRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
@@ -180,6 +179,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agent-console': typeof AgentConsoleRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
@@ -194,7 +194,6 @@ export interface FileRoutesById {
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
-  '/_authenticated/agent-console': typeof AuthenticatedAgentConsoleRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
@@ -204,6 +203,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agent-console'
     | '/assistant'
     | '/auth'
     | '/browser-agent'
@@ -218,7 +218,6 @@ export interface FileRouteTypes {
     | '/takedown'
     | '/violations'
     | '/youtube'
-    | '/agent-console'
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
@@ -226,6 +225,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agent-console'
     | '/assistant'
     | '/auth'
     | '/browser-agent'
@@ -240,7 +240,6 @@ export interface FileRouteTypes {
     | '/takedown'
     | '/violations'
     | '/youtube'
-    | '/agent-console'
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
@@ -248,6 +247,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agent-console'
     | '/assistant'
     | '/auth'
     | '/browser-agent'
@@ -262,7 +262,6 @@ export interface FileRouteTypes {
     | '/takedown'
     | '/violations'
     | '/youtube'
-    | '/_authenticated/agent-console'
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
@@ -271,6 +270,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentConsoleRoute: typeof AgentConsoleRoute
   AssistantRoute: typeof AssistantRoute
   AuthRoute: typeof AuthRoute
   BrowserAgentRoute: typeof BrowserAgentRoute
@@ -285,7 +285,6 @@ export interface RootRouteChildren {
   TakedownRoute: typeof TakedownRoute
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
-  AuthenticatedAgentConsoleRoute: typeof AuthenticatedAgentConsoleRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiSearchRoute: typeof ApiSearchRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
@@ -392,6 +391,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssistantRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agent-console': {
+      id: '/agent-console'
+      path: '/agent-console'
+      fullPath: '/agent-console'
+      preLoaderRoute: typeof AgentConsoleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -420,13 +426,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/agent-console': {
-      id: '/_authenticated/agent-console'
-      path: '/agent-console'
-      fullPath: '/agent-console'
-      preLoaderRoute: typeof AuthenticatedAgentConsoleRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/youtube-oauth-callback': {
       id: '/api/public/youtube-oauth-callback'
       path: '/api/public/youtube-oauth-callback'
@@ -439,6 +438,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentConsoleRoute: AgentConsoleRoute,
   AssistantRoute: AssistantRoute,
   AuthRoute: AuthRoute,
   BrowserAgentRoute: BrowserAgentRoute,
@@ -453,7 +453,6 @@ const rootRouteChildren: RootRouteChildren = {
   TakedownRoute: TakedownRoute,
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
-  AuthenticatedAgentConsoleRoute: AuthenticatedAgentConsoleRoute,
   ApiChatRoute: ApiChatRoute,
   ApiSearchRoute: ApiSearchRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
