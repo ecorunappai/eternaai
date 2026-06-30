@@ -107,7 +107,7 @@ function YouTubeDash() {
         <div className="mb-3 flex items-center gap-2">
           <Search className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Run YouTube Scan</h2>
-          <span className="text-xs text-muted-foreground">Firecrawl + AI face/content verification · saves only ≥60% verified matches</span>
+          <span className="text-xs text-muted-foreground">Multi-keyword Firecrawl discovery · English + Malayalam/Tamil/Hindi · face verification on demand</span>
         </div>
         {assets.length === 0 ? (
           <p className="text-sm text-muted-foreground">Register a reference image (face / celebrity photo) in Content Registry first.</p>
