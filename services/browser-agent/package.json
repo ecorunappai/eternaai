@@ -1,9 +1,9 @@
 {
   "name": "eterna-browser-agent",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Eterna AI external Playwright Browser Agent — investigates public pages, captures evidence, discovers public contacts.",
+  "description": "Eterna AI external Playwright Browser Agent — task-based operator that investigates public pages, captures evidence, discovers public contacts, drafts warning emails and prepares takedowns.",
   "main": "src/server.ts",
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -17,13 +17,16 @@
     "zod": "^3.23.8",
     "tsx": "^4.19.1",
     "uuid": "^10.0.0",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "p-queue": "^8.0.1",
+    "better-sqlite3": "^11.3.0"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/cors": "^2.8.17",
     "@types/node": "^20.14.0",
     "@types/uuid": "^10.0.0",
+    "@types/better-sqlite3": "^7.6.11",
     "typescript": "^5.5.4"
   }
 }
