@@ -225,15 +225,7 @@ export const draftWarningEmail = createServerFn({ method: "POST" })
     if (!key) throw new Error("Missing LOVABLE_API_KEY");
     const gateway = createLovableAiGatewayProvider(key);
 
-    const result = await generateText({
-      model: gateway("google/gemini-3-flash-preview"),
-      output: Output.object({ schema: DraftSchema }),
-      temperature: 0.3,
-      messages: [{
-        role: "user",
-        content: [{
-          type: "text",
-          text:
+    const prompt =
 `Draft a PROFESSIONAL, FIRM, NON-THREATENING copyright/content-misuse warning email from Eterna AI Protection Team on behalf of "${data.rightsOwnerName}".
 
 Target page title: ${c.page_title ?? "(unknown)"}
@@ -250,13 +242,41 @@ Requirements:
 - Note fair-use review window and reply path
 - Polite, lawful, never threatening, never false claims
 - Plain text only (no HTML)
-- Classify fair_use_flag honestly: if page looks like a reaction/commentary/news, choose possible_fair_use; if deepfake/impersonation/clear reupload, clear_violation
-- risk_level matches the severity`,
-        }],
-      }],
+- Classify fair_use_flag honestly: if page looks like a reaction/commentary/news, use possible_fair_use; if deepfake/impersonation/clear reupload, clear_violation; otherwise needs_legal_review
+- risk_level: one of low | medium | high | critical
+
+Respond with ONLY a single JSON object, no markdown, no commentary, matching exactly:
+{"subject":"...","body":"...","fair_use_flag":"clear_violation|possible_fair_use|needs_legal_review","risk_level":"low|medium|high|critical"}`;
+
+    const result = await generateText({
+      model: gateway("google/gemini-3-flash-preview"),
+      temperature: 0.3,
+      maxRetries: 2,
+      messages: [{ role: "user", content: prompt }],
     });
 
-    const draft = result.output;
+    const raw = result.text ?? "";
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      const block = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const obj = raw.match(/\{[\s\S]*\}/);
+      const candidate = (block?.[1] ?? obj?.[0] ?? "").trim();
+      try {
+        parsed = JSON.parse(candidate);
+      } catch {
+        throw new Error("AI returned an unparseable draft. Please retry.");
+      }
+    }
+    const safe = DraftSchema.safeParse(parsed);
+    const draft = safe.success ? safe.data : {
+      subject: (parsed as any)?.subject?.toString().slice(0, 140) || `Removal request — ${c.subject_name ?? "infringing content"}`,
+      body: (parsed as any)?.body?.toString().slice(0, 4000) || raw.slice(0, 4000),
+      fair_use_flag: (["clear_violation","possible_fair_use","needs_legal_review"].includes((parsed as any)?.fair_use_flag) ? (parsed as any).fair_use_flag : "needs_legal_review") as "clear_violation"|"possible_fair_use"|"needs_legal_review",
+      risk_level: (["low","medium","high","critical"].includes((parsed as any)?.risk_level) ? (parsed as any).risk_level : "medium") as "low"|"medium"|"high"|"critical",
+    };
+
 
     const { data: row, error } = await supabase.from("warning_emails").insert({
       case_id: c.id,
