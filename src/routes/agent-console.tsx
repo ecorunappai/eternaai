@@ -271,6 +271,8 @@ function AgentConsolePage() {
   const approve = useServerFn(approveAgentTask);
   const cancel = useServerFn(cancelAgentTask);
   const status = useServerFn(browserAgentStatus);
+  const igStatusFn = useServerFn(getInstagramMonitorStatus);
+  const [igStatus, setIgStatus] = useState<InstagramMonitorStatus | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem(MODE_KEY, mode);
@@ -287,8 +289,10 @@ function AgentConsolePage() {
     if (!user) return;
     refreshList();
     status().then(setAgentOnline).catch(() => setAgentOnline({ online: false, configured: false, code: "probe_failed", reason: "probe failed" }));
+    igStatusFn().then(setIgStatus).catch(() => {});
     const t = window.setInterval(refreshList, 4000);
-    return () => clearInterval(t);
+    const ig = window.setInterval(() => igStatusFn().then(setIgStatus).catch(() => {}), 30000);
+    return () => { clearInterval(t); clearInterval(ig); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
