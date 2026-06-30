@@ -60,6 +60,7 @@ function YouTubeDash() {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [segmentScanId, setSegmentScanId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const tabsBarRef = useRef<HTMLDivElement | null>(null);
 
   const scan = useServerFn(runYouTubeScan);
   const verifyFace = useServerFn(verifyYouTubeMatch);
