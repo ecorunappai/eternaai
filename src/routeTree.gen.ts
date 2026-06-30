@@ -13,6 +13,7 @@ import { Route as YoutubeRouteImport } from './routes/youtube'
 import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegistryRouteImport } from './routes/registry'
+import { Route as OwnedRouteImport } from './routes/owned'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
 import { Route as MatchingRouteImport } from './routes/matching'
 import { Route as IdentityRouteImport } from './routes/identity'
@@ -44,6 +45,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const RegistryRoute = RegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OwnedRoute = OwnedRouteImport.update({
+  id: '/owned',
+  path: '/owned',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MonitoringRoute = MonitoringRouteImport.update({
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/owned': typeof OwnedRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
@@ -136,6 +143,7 @@ export interface FileRoutesByTo {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/owned': typeof OwnedRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
@@ -155,6 +163,7 @@ export interface FileRoutesById {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/owned': typeof OwnedRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
@@ -175,6 +184,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/owned'
     | '/registry'
     | '/settings'
     | '/violations'
@@ -193,6 +203,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/owned'
     | '/registry'
     | '/settings'
     | '/violations'
@@ -211,6 +222,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/owned'
     | '/registry'
     | '/settings'
     | '/violations'
@@ -230,6 +242,7 @@ export interface RootRouteChildren {
   IdentityRoute: typeof IdentityRoute
   MatchingRoute: typeof MatchingRoute
   MonitoringRoute: typeof MonitoringRoute
+  OwnedRoute: typeof OwnedRoute
   RegistryRoute: typeof RegistryRoute
   SettingsRoute: typeof SettingsRoute
   ViolationsRoute: typeof ViolationsRoute
@@ -266,6 +279,13 @@ declare module '@tanstack/react-router' {
       path: '/registry'
       fullPath: '/registry'
       preLoaderRoute: typeof RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/owned': {
+      id: '/owned'
+      path: '/owned'
+      fullPath: '/owned'
+      preLoaderRoute: typeof OwnedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/monitoring': {
@@ -366,6 +386,7 @@ const rootRouteChildren: RootRouteChildren = {
   IdentityRoute: IdentityRoute,
   MatchingRoute: MatchingRoute,
   MonitoringRoute: MonitoringRoute,
+  OwnedRoute: OwnedRoute,
   RegistryRoute: RegistryRoute,
   SettingsRoute: SettingsRoute,
   ViolationsRoute: ViolationsRoute,
