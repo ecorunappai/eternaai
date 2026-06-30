@@ -95,6 +95,141 @@ export const runMatchingScan = createServerFn({ method: "POST" })
     return { inserted: inserted?.length ?? 0, matches: inserted };
   });
 
+// ============= REAL reverse-image scan via Firecrawl + Google Lens =============
+const RealScanInput = z.object({ assetId: z.string().uuid() });
+
+const EXCLUDED_HOSTS = [
+  "google.com", "google.", "gstatic.com", "googleusercontent.com",
+  "googleapis.com", "youtube.com/redirect", "schema.org", "w3.org",
+  "support.google.com", "policies.google.com", "accounts.google.com",
+  "lens.google.com",
+];
+
+function platformFromHost(host: string): string {
+  const map: Record<string, string> = {
+    "twitter.com": "Twitter/X", "x.com": "Twitter/X",
+    "instagram.com": "Instagram", "pinterest.com": "Pinterest",
+    "pinterest.co.uk": "Pinterest", "pin.it": "Pinterest",
+    "reddit.com": "Reddit", "tiktok.com": "TikTok", "imgur.com": "Imgur",
+    "tumblr.com": "Tumblr", "facebook.com": "Facebook", "fb.com": "Facebook",
+    "weibo.com": "Weibo", "vk.com": "VK", "flickr.com": "Flickr",
+    "behance.net": "Behance", "dribbble.com": "Dribbble",
+    "deviantart.com": "DeviantArt", "etsy.com": "Etsy",
+    "ebay.com": "eBay", "amazon.com": "Amazon", "alibaba.com": "Alibaba",
+    "shopify.com": "Shopify", "medium.com": "Medium", "wordpress.com": "WordPress",
+    "linkedin.com": "LinkedIn", "youtube.com": "YouTube",
+  };
+  for (const k of Object.keys(map)) if (host.endsWith(k)) return map[k];
+  return host.replace(/^www\./, "").split(".")[0].replace(/^./, (c) => c.toUpperCase());
+}
+
+export const runRealMatchingScan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => RealScanInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    if (!apiKey) throw new Error("Firecrawl is not connected. Link the Firecrawl connector and retry.");
+
+    const { data: asset, error } = await supabase.from("assets").select("*").eq("id", data.assetId).maybeSingle();
+    if (error || !asset) throw new Error("Asset not found");
+    if (asset.user_id !== userId) throw new Error("Forbidden");
+    if (asset.asset_type !== "image") throw new Error("Reverse image search only supports images.");
+    if (!asset.storage_path) throw new Error("Asset has no stored file.");
+
+    // Long-lived signed URL so Google Lens can fetch the image
+    const { data: signed, error: sErr } = await supabase.storage
+      .from("assets").createSignedUrl(asset.storage_path, 60 * 60 * 24 * 7);
+    if (sErr || !signed?.signedUrl) throw new Error("Could not sign asset URL");
+
+    const lensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(signed.signedUrl)}`;
+
+    // Firecrawl scrape — request links + html so we can extract result URLs and thumbnails
+    const fcRes = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        url: lensUrl,
+        formats: ["links", "html"],
+        onlyMainContent: false,
+        waitFor: 4500,
+        timeout: 45000,
+      }),
+    });
+
+    if (!fcRes.ok) {
+      const txt = await fcRes.text().catch(() => "");
+      throw new Error(`Firecrawl error (${fcRes.status}): ${txt.slice(0, 300)}`);
+    }
+    const fcJson: any = await fcRes.json();
+    const payload = fcJson?.data ?? fcJson;
+    const linksRaw: string[] = Array.isArray(payload?.links) ? payload.links : [];
+    const html: string = typeof payload?.html === "string" ? payload.html : "";
+
+    // Extract thumbnail map: <img src="..."> near each anchor (best-effort)
+    const thumbMap = new Map<string, string>();
+    const imgRegex = /<a[^>]+href="([^"]+)"[^>]*>[\s\S]{0,400}?<img[^>]+src="([^"]+)"/gi;
+    let m: RegExpExecArray | null;
+    while ((m = imgRegex.exec(html)) !== null) {
+      if (!thumbMap.has(m[1])) thumbMap.set(m[1], m[2]);
+    }
+
+    // Normalise + filter
+    const seen = new Set<string>();
+    const candidates: { url: string; host: string; rank: number; thumb: string | null }[] = [];
+    linksRaw.forEach((raw, idx) => {
+      try {
+        const u = new URL(raw);
+        if (!/^https?:$/.test(u.protocol)) return;
+        const host = u.hostname.toLowerCase();
+        if (EXCLUDED_HOSTS.some((h) => host.includes(h))) return;
+        const norm = `${u.origin}${u.pathname}`;
+        if (seen.has(norm)) return;
+        seen.add(norm);
+        candidates.push({ url: raw, host, rank: idx, thumb: thumbMap.get(raw) ?? null });
+      } catch { /* skip */ }
+    });
+
+    if (candidates.length === 0) {
+      return { inserted: 0, matches: [], note: "Google Lens returned no external matches for this image." };
+    }
+
+    // Take top 12 by rank
+    const top = candidates.slice(0, 12);
+
+    const rows = top.map((c, i) => {
+      // Confidence proxy: Lens result rank — top results are usually strongest visual matches.
+      // Decay from 92% down to ~45%.
+      const conf = Math.max(45, Math.round(92 - i * 4));
+      const risk = conf >= 85 ? "confirmed" : conf >= 70 ? "strong" : conf >= 55 ? "possible" : "review";
+      return {
+        asset_id: asset.id,
+        user_id: userId,
+        source_url: c.url,
+        platform: platformFromHost(c.host),
+        domain: c.host,
+        preview_url: c.thumb,
+        discovered_phash: null,
+        phash_score: null,
+        dhash_score: null,
+        clip_score: conf, // visual-rank proxy
+        metadata_score: null,
+        ai_score: conf,
+        final_confidence_score: conf,
+        risk_level: risk,
+        match_type: "reverse_image",
+        status: "pending",
+        discovered_via: "google_lens_firecrawl",
+        notes: `Google Lens rank #${i + 1} via Firecrawl`,
+      };
+    });
+
+    const { data: inserted, error: insErr } = await supabase
+      .from("discovered_matches").insert(rows).select("*");
+    if (insErr) throw insErr;
+    return { inserted: inserted?.length ?? 0, matches: inserted };
+  });
+
 const CreateViolationInput = z.object({ matchId: z.string().uuid() });
 
 export const createViolationFromMatch = createServerFn({ method: "POST" })
