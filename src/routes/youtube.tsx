@@ -132,10 +132,11 @@ function YouTubeDash() {
     if (!query.trim()) return toast.error("Enter a creator / celebrity name to discover videos.");
     setScanning(true);
     try {
-      const r = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
-      if (r.inserted === 0) toast.message((r as any).note ?? "No matches");
-      else {
-        toast.success(`${r.inserted} suspected videos across ${(r as any).variants ?? 0} variants. Classifying…`);
+      const r: any = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
+      if ((r.inserted ?? 0) === 0 && (r.candidates_found ?? 0) === 0) {
+        toast.message(r.note ?? "No matches");
+      } else {
+        toast.success(`+${r.new_count ?? r.inserted} new · ${r.duplicates_skipped ?? 0} duplicates skipped · ${r.passes_run ?? 0} discovery passes · total ${r.total ?? r.inserted}.`);
         await classifyFn({ data: { subject: query.trim() } });
       }
       load();
