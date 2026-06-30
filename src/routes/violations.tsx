@@ -83,18 +83,22 @@ function Violations() {
     setLoading(true);
     const [vRes, mRes] = await Promise.all([
       supabase.from("violations").select("*").order("detected_at", { ascending: false }),
-      supabase.from("discovered_matches").select("id,platform,source_url,video_title,risk_level,status,final_confidence_score,created_at").order("created_at", { ascending: false }),
+      supabase.from("discovered_matches").select("id,platform,source_url,video_title,video_id,preview_url,risk_level,status,final_confidence_score,created_at").order("created_at", { ascending: false }),
     ]);
     const v: Row[] = (vRes.data ?? []).map((r: any) => ({
       id: r.id, source: "violation", platform: r.platform, url: r.infringing_url,
       threat: r.threat_level, status: r.status ?? "open",
       detected_at: r.detected_at, similarity: r.similarity_score,
+      thumb: r.platform === "YouTube" ? ytThumb(r.infringing_url ?? "") : null,
     }));
     const m: Row[] = (mRes.data ?? []).map((r: any) => ({
       id: r.id, source: "match", platform: r.platform ?? "Web", url: r.source_url,
       threat: r.risk_level ?? "medium", status: matchToUnified(r.status ?? "pending"),
       detected_at: r.created_at, similarity: r.final_confidence_score, title: r.video_title,
+      thumb: r.preview_url
+        ?? (r.video_id ? `https://i.ytimg.com/vi/${r.video_id}/hqdefault.jpg` : ytThumb(r.source_url ?? "")),
     }));
+
     const all = [...v, ...m].sort((a, b) => +new Date(b.detected_at) - +new Date(a.detected_at));
     setRows(all);
     setLoading(false);
