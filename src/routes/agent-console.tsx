@@ -465,6 +465,36 @@ function AgentConsolePage() {
         );
       })()}
 
+      {/* Instagram monitor account status (no credentials shown) */}
+      {igStatus && igStatus.state !== "not_configured" && (() => {
+        const tone =
+          igStatus.state === "logged_in" ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-800" :
+          igStatus.state === "needs_verification" ? "border-amber-500/40 bg-amber-500/10 text-amber-900" :
+          "border-border bg-card text-foreground";
+        const label =
+          igStatus.state === "logged_in" ? "Connected" :
+          igStatus.state === "needs_verification" ? "Manual verification required" :
+          igStatus.state === "error" ? "Login error" :
+          igStatus.state === "logged_out" ? "Not signed in (will log in on next scan)" :
+          igStatus.state;
+        return (
+          <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2 text-sm ${tone}`}>
+            <span className="flex items-center gap-2">
+              <Instagram className="h-4 w-4" />
+              <strong>Instagram monitor:</strong>
+              <span className="font-mono text-xs">@{igStatus.username ?? "—"}</span>
+              <span className="text-xs opacity-80">· {label}</span>
+              {igStatus.lastLoginAt && (
+                <span className="text-xs opacity-60">· last login {new Date(igStatus.lastLoginAt).toLocaleString()}</span>
+              )}
+            </span>
+            {igStatus.lastError && igStatus.state !== "logged_in" && (
+              <span className="text-xs opacity-80 max-w-[60%] truncate" title={igStatus.lastError}>{igStatus.lastError}</span>
+            )}
+          </div>
+        );
+      })()}
+
       {/* KPI strip */}
       <div className="mb-4 grid grid-cols-2 md:grid-cols-5 gap-2">
         <Kpi label="Total" value={counts.all} icon={ListChecks} active={filter === "all"} onClick={() => setFilter("all")} />
