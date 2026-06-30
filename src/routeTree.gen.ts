@@ -14,6 +14,7 @@ import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as TakedownRouteImport } from './routes/takedown'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegistryRouteImport } from './routes/registry'
+import { Route as MonitoringJobsRouteImport } from './routes/monitoring-jobs'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
 import { Route as MatchingRouteImport } from './routes/matching'
 import { Route as IdentityRouteImport } from './routes/identity'
@@ -29,6 +30,7 @@ import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiPublicYoutubeOauthCallbackRouteImport } from './routes/api/public/youtube-oauth-callback'
+import { Route as ApiPublicHooksDispatchMonitoringRouteImport } from './routes/api/public/hooks/dispatch-monitoring'
 
 const YoutubeRoute = YoutubeRouteImport.update({
   id: '/youtube',
@@ -53,6 +55,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const RegistryRoute = RegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MonitoringJobsRoute = MonitoringJobsRouteImport.update({
+  id: '/monitoring-jobs',
+  path: '/monitoring-jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MonitoringRoute = MonitoringRouteImport.update({
@@ -131,6 +138,12 @@ const ApiPublicYoutubeOauthCallbackRoute =
     path: '/api/public/youtube-oauth-callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksDispatchMonitoringRoute =
+  ApiPublicHooksDispatchMonitoringRouteImport.update({
+    id: '/api/public/hooks/dispatch-monitoring',
+    path: '/api/public/hooks/dispatch-monitoring',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -144,6 +157,7 @@ export interface FileRoutesByFullPath {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
@@ -153,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
+  '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -166,6 +181,7 @@ export interface FileRoutesByTo {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
@@ -175,6 +191,7 @@ export interface FileRoutesByTo {
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
+  '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -189,6 +206,7 @@ export interface FileRoutesById {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
@@ -198,6 +216,7 @@ export interface FileRoutesById {
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
+  '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -213,6 +232,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/monitoring-jobs'
     | '/registry'
     | '/settings'
     | '/takedown'
@@ -222,6 +242,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
+    | '/api/public/hooks/dispatch-monitoring'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -235,6 +256,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/monitoring-jobs'
     | '/registry'
     | '/settings'
     | '/takedown'
@@ -244,6 +266,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
+    | '/api/public/hooks/dispatch-monitoring'
   id:
     | '__root__'
     | '/'
@@ -257,6 +280,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/monitoring-jobs'
     | '/registry'
     | '/settings'
     | '/takedown'
@@ -266,6 +290,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
+    | '/api/public/hooks/dispatch-monitoring'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -280,6 +305,7 @@ export interface RootRouteChildren {
   IdentityRoute: typeof IdentityRoute
   MatchingRoute: typeof MatchingRoute
   MonitoringRoute: typeof MonitoringRoute
+  MonitoringJobsRoute: typeof MonitoringJobsRoute
   RegistryRoute: typeof RegistryRoute
   SettingsRoute: typeof SettingsRoute
   TakedownRoute: typeof TakedownRoute
@@ -289,6 +315,7 @@ export interface RootRouteChildren {
   ApiSearchRoute: typeof ApiSearchRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
   ApiPublicYoutubeOauthCallbackRoute: typeof ApiPublicYoutubeOauthCallbackRoute
+  ApiPublicHooksDispatchMonitoringRoute: typeof ApiPublicHooksDispatchMonitoringRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -326,6 +353,13 @@ declare module '@tanstack/react-router' {
       path: '/registry'
       fullPath: '/registry'
       preLoaderRoute: typeof RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/monitoring-jobs': {
+      id: '/monitoring-jobs'
+      path: '/monitoring-jobs'
+      fullPath: '/monitoring-jobs'
+      preLoaderRoute: typeof MonitoringJobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/monitoring': {
@@ -433,6 +467,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicYoutubeOauthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/dispatch-monitoring': {
+      id: '/api/public/hooks/dispatch-monitoring'
+      path: '/api/public/hooks/dispatch-monitoring'
+      fullPath: '/api/public/hooks/dispatch-monitoring'
+      preLoaderRoute: typeof ApiPublicHooksDispatchMonitoringRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -448,6 +489,7 @@ const rootRouteChildren: RootRouteChildren = {
   IdentityRoute: IdentityRoute,
   MatchingRoute: MatchingRoute,
   MonitoringRoute: MonitoringRoute,
+  MonitoringJobsRoute: MonitoringJobsRoute,
   RegistryRoute: RegistryRoute,
   SettingsRoute: SettingsRoute,
   TakedownRoute: TakedownRoute,
@@ -457,6 +499,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSearchRoute: ApiSearchRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
   ApiPublicYoutubeOauthCallbackRoute: ApiPublicYoutubeOauthCallbackRoute,
+  ApiPublicHooksDispatchMonitoringRoute: ApiPublicHooksDispatchMonitoringRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

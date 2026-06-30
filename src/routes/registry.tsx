@@ -1,16 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { hashImageFile, extractVideoKeyframes } from "@/lib/perceptual-hash";
+import { setupAssetMonitoring } from "@/lib/monitoring-jobs.functions";
 
 export const Route = createFileRoute("/registry")({
   head: () => ({ meta: [{ title: "Content Registry — Eterna AI" }] }),
   component: Registry,
 });
+
+const ISSUE_TYPES = [
+  "Impersonation",
+  "Content theft / reupload",
+  "Troll / harassment",
+  "Defamation",
+  "Deepfake",
+  "Trademark misuse",
+];
 
 async function sha256Hex(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
@@ -28,12 +39,19 @@ function detectType(mime: string): string {
 function Registry() {
   const { user } = useAuth();
   const [assets, setAssets] = useState<any[]>([]);
+  const [jobsByAsset, setJobsByAsset] = useState<Record<string, number>>({});
   const [uploading, setUploading] = useState(false);
+  const [enablingFor, setEnablingFor] = useState<any | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const setupFn = useServerFn(setupAssetMonitoring);
 
   async function load() {
     const { data } = await supabase.from("assets").select("*").order("created_at", { ascending: false });
     setAssets(data ?? []);
+    const { data: jobs } = await supabase.from("monitoring_jobs").select("asset_id");
+    const map: Record<string, number> = {};
+    (jobs ?? []).forEach((j: any) => { if (j.asset_id) map[j.asset_id] = (map[j.asset_id] ?? 0) + 1; });
+    setJobsByAsset(map);
   }
   useEffect(() => { if (user) load(); }, [user]);
 
@@ -140,6 +158,11 @@ function Registry() {
                   <td className="p-3"><span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">● {a.status}</span></td>
                   <td className="p-3 text-muted-foreground text-xs">{new Date(a.created_at).toLocaleDateString()}</td>
                   <td className="p-3 text-right whitespace-nowrap">
+                    {jobsByAsset[a.id] ? (
+                      <Link to="/monitoring-jobs" className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium hover:underline mr-3"><ShieldCheck className="h-3 w-3" />{jobsByAsset[a.id]} scans active</Link>
+                    ) : (
+                      <button onClick={() => setEnablingFor(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ShieldCheck className="h-3 w-3" />Enable monitoring</button>
+                    )}
                     <Link to="/matching" className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ScanSearch className="h-3 w-3" />Scan</Link>
                     <button onClick={() => issueCert(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ExternalLink className="h-3 w-3" />Issue cert</button>
                     <button onClick={() => remove(a)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
@@ -150,6 +173,93 @@ function Registry() {
           </table>
         )}
       </div>
+
+      {enablingFor && (
+        <EnableMonitoringDialog
+          asset={enablingFor}
+          onClose={() => setEnablingFor(null)}
+          onSubmit={async (form) => {
+            try {
+              const res = await setupFn({ data: { ...form, assetId: enablingFor.id } });
+              toast.success(`${res.jobsCreated} monitoring scans scheduled`);
+              setEnablingFor(null);
+              load();
+            } catch (e) { toast.error((e as Error).message); }
+          }}
+        />
+      )}
     </AppShell>
+  );
+}
+
+function EnableMonitoringDialog({ asset, onClose, onSubmit }: { asset: any; onClose: () => void; onSubmit: (f: any) => Promise<void> }) {
+  const [creatorName, setCreatorName] = useState(asset.title?.replace(/\.[^.]+$/, "") ?? "");
+  const [officialYoutubeUrl, setYt] = useState("");
+  const [officialInstagramUrl, setIg] = useState("");
+  const [keywords, setKw] = useState("");
+  const [issueTypes, setIssues] = useState<string[]>(["Impersonation", "Content theft / reupload"]);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <h2 className="font-display text-lg font-semibold">Enable Auto-Monitoring</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Creates daily YouTube/Instagram/Google scans and a weekly content-misuse sweep. The browser agent runs one task at a time.</p>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="text-xs font-medium">Person / Brand name *</label>
+            <input value={creatorName} onChange={(e) => setCreatorName(e.target.value)} className="mt-1 w-full h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium">Official YouTube</label>
+              <input value={officialYoutubeUrl} onChange={(e) => setYt(e.target.value)} placeholder="https://youtube.com/@…" className="mt-1 w-full h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs font-medium">Official Instagram</label>
+              <input value={officialInstagramUrl} onChange={(e) => setIg(e.target.value)} placeholder="https://instagram.com/…" className="mt-1 w-full h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium">Keywords (comma-separated)</label>
+            <input value={keywords} onChange={(e) => setKw(e.target.value)} placeholder="brand, tagline, signature phrase" className="mt-1 w-full h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium">Issue types to monitor</label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {ISSUE_TYPES.map((t) => {
+                const on = issueTypes.includes(t);
+                return (
+                  <button key={t} type="button" onClick={() => setIssues(on ? issueTypes.filter(x => x !== t) : [...issueTypes, t])} className={`rounded-full px-3 py-1 text-xs border ${on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>{t}</button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="h-9 rounded-lg border border-border px-3 text-sm">Cancel</button>
+          <button
+            disabled={saving || !creatorName}
+            onClick={async () => {
+              setSaving(true);
+              await onSubmit({
+                creatorName,
+                officialYoutubeUrl: officialYoutubeUrl || undefined,
+                officialInstagramUrl: officialInstagramUrl || undefined,
+                keywords: keywords.split(",").map(s => s.trim()).filter(Boolean),
+                issueTypes,
+              });
+              setSaving(false);
+            }}
+            className="inline-flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+            style={{ background: "var(--gradient-violet)" }}
+          >
+            {saving && <Loader2 className="h-3 w-3 animate-spin" />} Enable monitoring
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

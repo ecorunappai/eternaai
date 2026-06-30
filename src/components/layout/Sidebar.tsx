@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, ShieldCheck, FileStack, ScanSearch, AlertOctagon, Gavel, Award, Crown, Sparkles, Settings, LogOut, Youtube, Bot, Workflow } from "lucide-react";
+import { LayoutDashboard, ShieldCheck, FileStack, ScanSearch, AlertOctagon, Gavel, Award, Crown, Sparkles, Settings, LogOut, Youtube, Bot, Workflow, CalendarClock } from "lucide-react";
 import type { ComponentType } from "react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,7 @@ type NavItem = { to: string; label: string; icon: ComponentType<{ className?: st
 const primary: NavItem[] = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/registry", label: "Content Registry", icon: FileStack },
+  { to: "/monitoring-jobs", label: "Auto-Monitoring", icon: CalendarClock },
   { to: "/monitoring", label: "AI Monitoring", icon: ScanSearch },
   { to: "/matching", label: "Matching Engine", icon: ScanSearch },
   { to: "/youtube", label: "Monitoring", icon: Youtube },

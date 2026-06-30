@@ -579,6 +579,84 @@ export type Database = {
           },
         ]
       }
+      monitoring_jobs: {
+        Row: {
+          asset_id: string | null
+          asset_name: string
+          config: Json
+          created_at: string
+          frequency: string
+          id: string
+          last_run_at: string | null
+          last_task_id: string | null
+          last_worker_task_id: string | null
+          next_run_at: string
+          profile_id: string | null
+          run_count: number
+          scan_type: string
+          source: string
+          status: string
+          updated_at: string
+          user_id: string
+          worker_task_type: string
+        }
+        Insert: {
+          asset_id?: string | null
+          asset_name: string
+          config?: Json
+          created_at?: string
+          frequency?: string
+          id?: string
+          last_run_at?: string | null
+          last_task_id?: string | null
+          last_worker_task_id?: string | null
+          next_run_at?: string
+          profile_id?: string | null
+          run_count?: number
+          scan_type: string
+          source?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+          worker_task_type: string
+        }
+        Update: {
+          asset_id?: string | null
+          asset_name?: string
+          config?: Json
+          created_at?: string
+          frequency?: string
+          id?: string
+          last_run_at?: string | null
+          last_task_id?: string | null
+          last_worker_task_id?: string | null
+          next_run_at?: string
+          profile_id?: string | null
+          run_count?: number
+          scan_type?: string
+          source?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+          worker_task_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monitoring_jobs_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "monitoring_jobs_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "monitoring_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       monitoring_profiles: {
         Row: {
           aliases: string[] | null
@@ -588,6 +666,7 @@ export type Database = {
           created_at: string
           creator_name: string
           id: string
+          issue_types: string[]
           keywords: string[] | null
           last_scan_at: string | null
           official_instagram_url: string | null
@@ -609,6 +688,7 @@ export type Database = {
           created_at?: string
           creator_name: string
           id?: string
+          issue_types?: string[]
           keywords?: string[] | null
           last_scan_at?: string | null
           official_instagram_url?: string | null
@@ -630,6 +710,7 @@ export type Database = {
           created_at?: string
           creator_name?: string
           id?: string
+          issue_types?: string[]
           keywords?: string[] | null
           last_scan_at?: string | null
           official_instagram_url?: string | null
