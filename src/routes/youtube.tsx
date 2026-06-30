@@ -116,41 +116,82 @@ function YouTubeDash() {
   }, [selectedAsset]);
 
   const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }, []);
+  const now = Date.now();
+
+  // Sort all matches newest-first using published_at when available, falling
+  // back to created_at. This is the canonical ordering for every tab so old
+  // videos never appear above fresh uploads.
+  const matchesSorted = useMemo(() => {
+    return [...matches].sort((a, b) => {
+      const ap = a.published_at ? new Date(a.published_at).getTime() : 0;
+      const bp = b.published_at ? new Date(b.published_at).getTime() : 0;
+      if (ap !== bp) return bp - ap;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [matches]);
+
+  function hoursSinceUpload(m: any): number | null {
+    if (m.recency_hours != null) return Number(m.recency_hours);
+    if (m.published_at) return (now - new Date(m.published_at).getTime()) / 3600_000;
+    return null;
+  }
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: matches.length, latest: matches.length };
-    let newToday = 0, historical = 0;
-    for (const m of matches) {
-      const cat = m.is_owned ? "official" : (m.result_category ?? "needs_review");
-      c[cat] = (c[cat] ?? 0) + 1;
-      const created = new Date(m.created_at).getTime();
-      if (created >= todayStart) newToday++;
-      if (/\b20(20|21|22|23|24)\b/.test(String(m.notes ?? ""))) historical++;
+    const c: Record<string, number> = { all: matchesSorted.length, latest: matchesSorted.length };
+    let last24 = 0, last7 = 0, last30 = 0, trending = 0, historical = 0;
+    for (const m of matchesSorted) {
+      const h = hoursSinceUpload(m);
+      if (h != null) {
+        if (h <= 24) last24++;
+        if (h <= 24 * 7) last7++;
+        if (h <= 24 * 30) last30++;
+      }
+      if (Number(m.trending_score ?? 0) >= 60) trending++;
+      if (h == null || h > 24 * 90) historical++;
+      if (m.is_owned || m.result_category === "official") c.official = (c.official ?? 0) + 1;
+      const tags: string[] = Array.isArray(m.content_tags) ? m.content_tags : [];
+      for (const t of tags) c[t] = (c[t] ?? 0) + 1;
+      const cat = m.result_category ?? "needs_review";
+      if (["reupload", "needs_review"].includes(cat) && !m.is_owned) c[cat] = (c[cat] ?? 0) + 1;
     }
-    c.new_today = newToday;
-    c.historical = historical;
+    c.last_24h = last24; c.last_7d = last7; c.last_30d = last30;
+    c.trending = trending; c.historical = historical;
     return c;
-  }, [matches, todayStart]);
+  }, [matchesSorted, now]);
 
   const stats = useMemo(() => {
     const channels = new Set<string>();
     let newToday = 0; let last = 0;
-    for (const m of matches) {
+    for (const m of matchesSorted) {
       if (m.channel_name) channels.add(m.channel_name);
       const t = new Date(m.created_at).getTime();
       if (t >= todayStart) newToday++;
       if (t > last) last = t;
     }
-    return { total: matches.length, channels: channels.size, newToday, last };
-  }, [matches, todayStart]);
+    return { total: matchesSorted.length, channels: channels.size, newToday, last };
+  }, [matchesSorted, todayStart]);
+
+  // Latest Activity panel: surfaces the freshest discovered upload + risk.
+  const latestActivity = useMemo(() => {
+    const latestVideo = matchesSorted.find(m => m.published_at) ?? matchesSorted[0];
+    const trendingMax = matchesSorted.reduce((mx, m) => Math.max(mx, Number(m.trending_score ?? 0)), 0);
+    const last24Count = counts.last_24h ?? 0;
+    const risk = trendingMax >= 75 || last24Count >= 5 ? "High" : trendingMax >= 50 || last24Count >= 1 ? "Medium" : "Low";
+    return { latestVideo, trendingMax, last24Count, risk };
+  }, [matchesSorted, counts]);
 
   const visible = useMemo(() => {
-    if (tab === "all" || tab === "latest") return matches;
-    if (tab === "new_today") return matches.filter(m => new Date(m.created_at).getTime() >= todayStart);
-    if (tab === "historical") return matches.filter(m => /\b20(20|21|22|23|24)\b/.test(String(m.notes ?? "")));
-    if (tab === "official") return matches.filter(m => m.is_owned || m.result_category === "official");
-    return matches.filter(m => !m.is_owned && (m.result_category ?? "needs_review") === tab);
-  }, [matches, tab, todayStart]);
+    let list = matchesSorted;
+    if (tab === "all" || tab === "latest") return list;
+    if (tab === "last_24h") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24; });
+    if (tab === "last_7d") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24 * 7; });
+    if (tab === "last_30d") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24 * 30; });
+    if (tab === "trending") return [...list].sort((a, b) => Number(b.trending_score ?? 0) - Number(a.trending_score ?? 0)).filter(m => Number(m.trending_score ?? 0) >= 40);
+    if (tab === "historical") return list.filter(m => { const h = hoursSinceUpload(m); return h == null || h > 24 * 90; });
+    if (tab === "official") return list.filter(m => m.is_owned || m.result_category === "official");
+    if (TAG_TABS.has(tab)) return list.filter(m => Array.isArray(m.content_tags) && m.content_tags.includes(tab) && !m.is_owned);
+    return list.filter(m => !m.is_owned && (m.result_category ?? "needs_review") === tab);
+  }, [matchesSorted, tab, now]);
 
   const [liveJob, setLiveJob] = useState<any>(null);
 
