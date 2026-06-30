@@ -321,13 +321,27 @@ export const verifyYouTubeMatch = createServerFn({ method: "POST" })
     const { data: signed } = await supabase.storage.from("assets").createSignedUrl(asset.storage_path, 60 * 60);
     if (!signed?.signedUrl) throw new Error("Could not sign reference URL");
 
+    // Fetch both images as bytes — Gemini sometimes refuses to fetch arbitrary URLs (esp. YouTube CDN).
+    async function fetchImg(url: string): Promise<{ data: Uint8Array; mediaType: string } | null> {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) return null;
+        const buf = new Uint8Array(await r.arrayBuffer());
+        const ct = r.headers.get("content-type") ?? "image/jpeg";
+        return { data: buf, mediaType: ct.startsWith("image/") ? ct : "image/jpeg" };
+      } catch { return null; }
+    }
+    const [refImg, thumbImg] = await Promise.all([fetchImg(signed.signedUrl), fetchImg(String(match.preview_url ?? ""))]);
+    if (!refImg) throw new Error("Could not load reference image");
+    if (!thumbImg) throw new Error("Could not load YouTube thumbnail (it may be blocked or expired). Try again.");
+
     const gateway = createLovableAiGatewayProvider(key);
     let v: z.infer<typeof VerificationSchema>;
     try {
       const r = await generateText({
         model: gateway("google/gemini-3-flash-preview"),
         output: Output.object({ schema: VerificationSchema }),
-        temperature: 0, maxRetries: 1,
+        temperature: 0, maxRetries: 2,
         messages: [{
           role: "user",
           content: [
@@ -336,14 +350,23 @@ export const verifyYouTubeMatch = createServerFn({ method: "POST" })
               `Title: "${match.video_title}"\nChannel: "${match.channel_name}"\n` +
               `Return same_person_or_content=true only when face/content clearly matches. ` +
               `Then classify violation_category and fair_use_flag.` },
-            { type: "file", data: new URL(signed.signedUrl), mediaType: "image" },
-            { type: "file", data: new URL(String(match.preview_url ?? "")), mediaType: "image" },
+            { type: "file", data: refImg.data, mediaType: refImg.mediaType },
+            { type: "file", data: thumbImg.data, mediaType: thumbImg.mediaType },
           ],
         }],
       });
       v = r.output;
     } catch (e: any) {
-      throw new Error(`AI verification failed: ${e?.message ?? e}`);
+      // Schema fail / model refusal — degrade to "no match" instead of crashing.
+      console.warn("[verifyYouTubeMatch] schema fail, defaulting to no-match:", e?.message);
+      v = {
+        same_person_or_content: false,
+        visual_confidence: 0,
+        appears_in: "thumbnail",
+        violation_category: "unrelated",
+        fair_use_flag: "needs_legal_review",
+        reason: "AI did not return a structured verdict; manual review required.",
+      };
     }
 
     const visual = Math.round(v.visual_confidence);
