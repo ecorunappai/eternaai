@@ -154,11 +154,8 @@ Return ONLY JSON: {"description":"...","legal_declaration":"...","risk_warnings"
       country: "—",
     };
 
-    const status = missing.length
-      ? "evidence_missing"
-      : warning
-        ? "waiting_approval"
-        : "platform_takedown_ready";
+    const status: "evidence_missing" | "waiting_approval" = missing.length ? "evidence_missing" : "waiting_approval";
+    const warningSkipped = !warning && !missing.length;
 
     const { data: row, error } = await supabase.from("takedown_cases").insert({
       user_id: userId,
