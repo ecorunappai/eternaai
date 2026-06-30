@@ -174,7 +174,26 @@ function YouTubeDash() {
                         {m.violation_category && m.violation_category !== "unrelated" && (
                           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary capitalize">{String(m.violation_category).replace(/_/g, " ")}</span>
                         )}
+                        {(() => {
+                          const kw = /KEYWORD:([^|]+)/.exec(m.notes ?? "")?.[1]?.trim();
+                          return kw ? <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground"><Tag className="h-3 w-3" />{kw}</span> : null;
+                        })()}
+                        {Number(m.ai_score ?? 0) === 0 && (
+                          <span className="rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold">Needs Visual Review</span>
+                        )}
                         <span className="ml-auto text-xs text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                      </div>
+                      <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
+                      <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
+                      <a href={m.source_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                        <ExternalLink className="h-3 w-3" />{m.source_url}
+                      </a>
+                      {m.notes && <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-2">{String(m.notes).replace(/KEYWORD:[^|]+\|\s*/, "")}</span></div>}
+                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                        <Score label="Face / Visual" v={m.clip_score} />
+                        <Score label="AI Verify" v={m.ai_score} />
+                        <Score label="Text Signal" v={m.metadata_score} />
+                        <Score label="Final" v={m.final_confidence_score} bold />
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
