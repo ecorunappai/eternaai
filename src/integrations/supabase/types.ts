@@ -14,13 +14,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      asset_keyframes: {
+        Row: {
+          asset_id: string
+          clip_embedding: Json | null
+          created_at: string
+          frame_url: string | null
+          id: string
+          phash: string | null
+          timestamp_sec: number | null
+          user_id: string
+        }
+        Insert: {
+          asset_id: string
+          clip_embedding?: Json | null
+          created_at?: string
+          frame_url?: string | null
+          id?: string
+          phash?: string | null
+          timestamp_sec?: number | null
+          user_id: string
+        }
+        Update: {
+          asset_id?: string
+          clip_embedding?: Json | null
+          created_at?: string
+          frame_url?: string | null
+          id?: string
+          phash?: string | null
+          timestamp_sec?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "asset_keyframes_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       assets: {
         Row: {
+          ahash: string | null
           asset_type: string
+          clip_embedding: Json | null
           created_at: string
           description: string | null
+          dhash: string | null
           file_size: number | null
+          file_url: string | null
           id: string
+          image_metadata: Json | null
           mime_type: string | null
           phash: string | null
           sha256: string | null
@@ -31,11 +77,16 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ahash?: string | null
           asset_type: string
+          clip_embedding?: Json | null
           created_at?: string
           description?: string | null
+          dhash?: string | null
           file_size?: number | null
+          file_url?: string | null
           id?: string
+          image_metadata?: Json | null
           mime_type?: string | null
           phash?: string | null
           sha256?: string | null
@@ -46,11 +97,16 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ahash?: string | null
           asset_type?: string
+          clip_embedding?: Json | null
           created_at?: string
           description?: string | null
+          dhash?: string | null
           file_size?: number | null
+          file_url?: string | null
           id?: string
+          image_metadata?: Json | null
           mime_type?: string | null
           phash?: string | null
           sha256?: string | null
@@ -117,6 +173,83 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      discovered_matches: {
+        Row: {
+          ai_score: number | null
+          asset_id: string
+          clip_score: number | null
+          created_at: string
+          dhash_score: number | null
+          discovered_phash: string | null
+          discovered_via: string | null
+          domain: string | null
+          final_confidence_score: number | null
+          id: string
+          match_type: string | null
+          metadata_score: number | null
+          notes: string | null
+          phash_score: number | null
+          platform: string | null
+          preview_url: string | null
+          risk_level: string | null
+          source_url: string
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_score?: number | null
+          asset_id: string
+          clip_score?: number | null
+          created_at?: string
+          dhash_score?: number | null
+          discovered_phash?: string | null
+          discovered_via?: string | null
+          domain?: string | null
+          final_confidence_score?: number | null
+          id?: string
+          match_type?: string | null
+          metadata_score?: number | null
+          notes?: string | null
+          phash_score?: number | null
+          platform?: string | null
+          preview_url?: string | null
+          risk_level?: string | null
+          source_url: string
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_score?: number | null
+          asset_id?: string
+          clip_score?: number | null
+          created_at?: string
+          dhash_score?: number | null
+          discovered_phash?: string | null
+          discovered_via?: string | null
+          domain?: string | null
+          final_confidence_score?: number | null
+          id?: string
+          match_type?: string | null
+          metadata_score?: number | null
+          notes?: string | null
+          phash_score?: number | null
+          platform?: string | null
+          preview_url?: string | null
+          risk_level?: string | null
+          source_url?: string
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "discovered_matches_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       identities: {
         Row: {
@@ -231,10 +364,12 @@ export type Database = {
       violations: {
         Row: {
           asset_id: string | null
+          confidence_score: number | null
           detected_at: string
           evidence_url: string | null
           id: string
           infringing_url: string
+          match_id: string | null
           notes: string | null
           platform: string
           similarity_score: number | null
@@ -242,13 +377,16 @@ export type Database = {
           threat_level: string
           updated_at: string
           user_id: string
+          violation_type: string | null
         }
         Insert: {
           asset_id?: string | null
+          confidence_score?: number | null
           detected_at?: string
           evidence_url?: string | null
           id?: string
           infringing_url: string
+          match_id?: string | null
           notes?: string | null
           platform: string
           similarity_score?: number | null
@@ -256,13 +394,16 @@ export type Database = {
           threat_level?: string
           updated_at?: string
           user_id: string
+          violation_type?: string | null
         }
         Update: {
           asset_id?: string | null
+          confidence_score?: number | null
           detected_at?: string
           evidence_url?: string | null
           id?: string
           infringing_url?: string
+          match_id?: string | null
           notes?: string | null
           platform?: string
           similarity_score?: number | null
@@ -270,6 +411,7 @@ export type Database = {
           threat_level?: string
           updated_at?: string
           user_id?: string
+          violation_type?: string | null
         }
         Relationships: [
           {
@@ -277,6 +419,13 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "violations_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "discovered_matches"
             referencedColumns: ["id"]
           },
         ]
