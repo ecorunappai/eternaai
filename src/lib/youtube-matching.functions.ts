@@ -185,23 +185,39 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
 }
 
 async function firecrawlHtml(apiKey: string, url: string, waitFor = 2500): Promise<string> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 22000);
-  try {
-    const r = await fetch("https://api.firecrawl.dev/v2/scrape", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ url, formats: ["html"], onlyMainContent: false, waitFor, timeout: 20000 }),
-      signal: ctrl.signal,
-    });
-    if (!r.ok) {
-      const t = await r.text().catch(() => "");
-      throw new Error(`Firecrawl ${r.status}: ${t.slice(0, 160)}`);
-    }
-    const j: any = await r.json();
-    const p = j?.data ?? j;
-    return typeof p?.html === "string" ? p.html : "";
-  } finally { clearTimeout(timer); }
+  // One quick attempt, then a shorter fallback so a SCRAPE_TIMEOUT (408) on a
+  // single date-filtered pass doesn't surface as a hard error to the user.
+  const attempts: Array<{ waitFor: number; timeout: number; abortMs: number }> = [
+    { waitFor, timeout: 18000, abortMs: 20000 },
+    { waitFor: 800, timeout: 9000, abortMs: 11000 },
+  ];
+  let lastErr: any = null;
+  for (const a of attempts) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), a.abortMs);
+    try {
+      const r = await fetch("https://api.firecrawl.dev/v2/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ url, formats: ["html"], onlyMainContent: false, waitFor: a.waitFor, timeout: a.timeout }),
+        signal: ctrl.signal,
+      });
+      if (r.status === 408) { lastErr = new Error("Firecrawl 408 timeout"); continue; }
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(`Firecrawl ${r.status}: ${t.slice(0, 160)}`);
+      }
+      const j: any = await r.json();
+      const p = j?.data ?? j;
+      return typeof p?.html === "string" ? p.html : "";
+    } catch (e) {
+      lastErr = e;
+    } finally { clearTimeout(timer); }
+  }
+  // Soft-fail: return empty HTML so the pass is recorded as "no candidates"
+  // instead of crashing the scan job. Caller logs from passStats.
+  console.warn("firecrawlHtml soft-fail", url, lastErr?.message || lastErr);
+  return "";
 }
 
 // YouTube search sort tokens (`&sp=...`). Encoded values match the actual
