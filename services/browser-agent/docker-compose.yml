@@ -1,0 +1,34 @@
+# Eterna AI — Browser Agent standalone stack
+# Run on any Linux VPS:  docker compose up -d --build
+#
+# Required .env (next to this file):
+#   BROWSER_AGENT_TOKEN=<openssl rand -hex 32>
+#   PUBLIC_BASE_URL=https://browser-agent.yourdomain.com
+#
+# Put the same BROWSER_AGENT_URL + BROWSER_AGENT_TOKEN into the
+# Eterna app secrets so the Monitoring Engine can call this service.
+
+name: eterna-browser-agent
+
+services:
+  browser-agent:
+    build: .
+    container_name: eterna-browser-agent
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    environment:
+      - PORT=8090
+      - BROWSER_AGENT_TOKEN=${BROWSER_AGENT_TOKEN}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8090}
+      - PW_HEADLESS=true
+      - PW_TIMEOUT_MS=30000
+    shm_size: "1gb"
+    volumes:
+      - evidence_data:/app/evidence
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  evidence_data:
