@@ -118,6 +118,47 @@ export type Database = {
         }
         Relationships: []
       }
+      case_evidence: {
+        Row: {
+          case_id: string
+          content: string | null
+          created_at: string
+          evidence_type: string
+          id: string
+          metadata: Json | null
+          source_url: string | null
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          content?: string | null
+          created_at?: string
+          evidence_type: string
+          id?: string
+          metadata?: Json | null
+          source_url?: string | null
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          content?: string | null
+          created_at?: string
+          evidence_type?: string
+          id?: string
+          metadata?: Json | null
+          source_url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_evidence_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "enforcement_cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       certificates: {
         Row: {
           asset_id: string
@@ -173,6 +214,50 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      creator_contacts: {
+        Row: {
+          case_id: string
+          contact_type: string
+          created_at: string
+          id: string
+          source_label: string | null
+          source_url: string | null
+          user_id: string
+          value: string
+          verified: boolean
+        }
+        Insert: {
+          case_id: string
+          contact_type?: string
+          created_at?: string
+          id?: string
+          source_label?: string | null
+          source_url?: string | null
+          user_id: string
+          value: string
+          verified?: boolean
+        }
+        Update: {
+          case_id?: string
+          contact_type?: string
+          created_at?: string
+          id?: string
+          source_label?: string | null
+          source_url?: string | null
+          user_id?: string
+          value?: string
+          verified?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creator_contacts_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "enforcement_cases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       discovered_matches: {
         Row: {
@@ -262,6 +347,78 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      enforcement_cases: {
+        Row: {
+          asset_id: string | null
+          channel_url: string | null
+          created_at: string
+          id: string
+          match_id: string | null
+          notes: string | null
+          page_description: string | null
+          page_title: string | null
+          platform: string | null
+          risk_level: string | null
+          screenshot_url: string | null
+          status: string
+          subject_name: string | null
+          target_url: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_id?: string | null
+          channel_url?: string | null
+          created_at?: string
+          id?: string
+          match_id?: string | null
+          notes?: string | null
+          page_description?: string | null
+          page_title?: string | null
+          platform?: string | null
+          risk_level?: string | null
+          screenshot_url?: string | null
+          status?: string
+          subject_name?: string | null
+          target_url: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_id?: string | null
+          channel_url?: string | null
+          created_at?: string
+          id?: string
+          match_id?: string | null
+          notes?: string | null
+          page_description?: string | null
+          page_title?: string | null
+          platform?: string | null
+          risk_level?: string | null
+          screenshot_url?: string | null
+          status?: string
+          subject_name?: string | null
+          target_url?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enforcement_cases_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enforcement_cases_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "discovered_matches"
             referencedColumns: ["id"]
           },
         ]
@@ -441,6 +598,65 @@ export type Database = {
             columns: ["match_id"]
             isOneToOne: false
             referencedRelation: "discovered_matches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      warning_emails: {
+        Row: {
+          approved_at: string | null
+          body: string
+          case_id: string
+          created_at: string
+          deadline_hours: number
+          fair_use_flag: string | null
+          id: string
+          recipient_email: string
+          risk_level: string | null
+          sent_at: string | null
+          status: string
+          subject: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          approved_at?: string | null
+          body: string
+          case_id: string
+          created_at?: string
+          deadline_hours?: number
+          fair_use_flag?: string | null
+          id?: string
+          recipient_email: string
+          risk_level?: string | null
+          sent_at?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          approved_at?: string | null
+          body?: string
+          case_id?: string
+          created_at?: string
+          deadline_hours?: number
+          fair_use_flag?: string | null
+          id?: string
+          recipient_email?: string
+          risk_level?: string | null
+          sent_at?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "warning_emails_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "enforcement_cases"
             referencedColumns: ["id"]
           },
         ]
