@@ -229,11 +229,100 @@ function TakedownPage() {
                     <button onClick={() => act("mark_rejected")} className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent">Mark Rejected</button>
                   </>
                 )}
+                <button
+                  onClick={async () => {
+                    setAutofillBusy(true);
+                    try {
+                      const r = await buildAutofill({ data: { takedownId: active.id } });
+                      setAutofill(r);
+                      toast.success("Autofill artifacts ready");
+                    } catch (e: any) { toast.error(e.message); }
+                    finally { setAutofillBusy(false); }
+                  }}
+                  disabled={autofillBusy}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 text-white px-3 py-1.5 text-xs hover:bg-violet-700 disabled:opacity-50"
+                >
+                  {autofillBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
+                  Generate Autofill
+                </button>
               </div>
+
+              {autofill && (
+                <div className="rounded-md border bg-violet-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-semibold flex items-center gap-2"><Wand2 className="h-4 w-4 text-violet-600" /> Autofill — {autofill.platform}</div>
+                    <button onClick={() => setAutofill(null)} className="text-xs text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{autofill.notes}</p>
+                  <div className="rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-[11px] text-amber-800 flex gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Eterna AI never submits on your behalf. Review every field, then click Submit yourself.
+                  </div>
+
+                  {autofill.kind === "email" ? (
+                    <div className="space-y-2">
+                      <a href={autofill.mailto} className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs">
+                        <Mail className="h-3.5 w-3.5" /> Open in mail client
+                      </a>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(autofill.body); toast.success("Body copied"); }}
+                        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs ml-2"
+                      ><Copy className="h-3.5 w-3.5" /> Copy email body</button>
+                      <pre className="text-[11px] bg-background border rounded p-3 max-h-48 overflow-auto whitespace-pre-wrap">{autofill.body}</pre>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-xs font-medium mb-1">1 · Bookmarklet (one-click in-browser autofill)</div>
+                        <p className="text-[11px] text-muted-foreground mb-2">Drag this link to your bookmarks bar. Open the platform form, sign in, click the bookmarklet — fields fill, nothing submits.</p>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={autofill.bookmarklet}
+                            onClick={(e) => e.preventDefault()}
+                            draggable
+                            className="inline-flex items-center gap-1.5 rounded-md border-2 border-dashed border-violet-500 bg-white px-3 py-1.5 text-xs font-medium text-violet-700 cursor-grab"
+                          >📌 Eterna Autofill — {autofill.platform}</a>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(autofill.bookmarklet); toast.success("Bookmarklet copied"); }}
+                            className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs"
+                          ><Copy className="h-3.5 w-3.5" /> Copy</button>
+                          <a href={autofill.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs hover:bg-accent">
+                            <ExternalLink className="h-3.5 w-3.5" /> Open form
+                          </a>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="text-xs font-medium mb-1">2 · Playwright script (run locally, no submit)</div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              const blob = new Blob([autofill.script], { type: "text/javascript" });
+                              const u = URL.createObjectURL(blob);
+                              const a = document.createElement("a");
+                              a.href = u; a.download = `eterna-autofill-${active.id.slice(0,8)}.mjs`; a.click();
+                              URL.revokeObjectURL(u);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs"
+                          ><Download className="h-3.5 w-3.5" /> Download fill.mjs</button>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(autofill.script); toast.success("Script copied"); }}
+                            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs"
+                          ><Copy className="h-3.5 w-3.5" /> Copy</button>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          <code>npm i -D playwright &amp;&amp; npx playwright install chromium &amp;&amp; node fill.mjs</code>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
         </section>
       </div>
+
 
       {/* LIST */}
       <section className="surface-card mt-6 overflow-hidden">
