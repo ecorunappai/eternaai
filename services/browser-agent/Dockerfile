@@ -16,7 +16,7 @@ ENV PORT=8090
 EXPOSE 8090
 
 # Storage for screenshots/evidence
-RUN mkdir -p /app/evidence
+RUN mkdir -p /app/evidence /app/data
 VOLUME ["/app/evidence"]
 
 CMD ["npx", "tsx", "src/server.ts"]
