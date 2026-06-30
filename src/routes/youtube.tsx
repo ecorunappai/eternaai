@@ -12,6 +12,7 @@ import { runYouTubeScan, verifyYouTubeMatch } from "@/lib/youtube-matching.funct
 import { runMultiPlatformScan } from "@/lib/multi-platform-monitoring.functions";
 import { createViolationFromMatch } from "@/lib/matching.functions";
 import { openCaseFromMatch, investigateCase, discoverContacts } from "@/lib/browser-agent.functions";
+import { browserAgentStatus } from "@/lib/browser-agent-client.functions";
 
 export const Route = createFileRoute("/youtube")({
   head: () => ({ meta: [{ title: "Monitoring Dashboard — Eterna AI" }] }),
@@ -70,6 +71,9 @@ function YouTubeDash() {
   const openCase = useServerFn(openCaseFromMatch);
   const investigate = useServerFn(investigateCase);
   const findContacts = useServerFn(discoverContacts);
+  const agentStatus = useServerFn(browserAgentStatus);
+  const [agentOnline, setAgentOnline] = useState<{ online: boolean; configured: boolean; reason?: string } | null>(null);
+  useEffect(() => { agentStatus().then((s) => setAgentOnline(s)).catch(() => setAgentOnline({ online: false, configured: false, reason: "probe failed" })); }, []);
 
   async function load() {
     const [a, m] = await Promise.all([
@@ -171,6 +175,12 @@ function YouTubeDash() {
 
   return (
     <AppShell title="Monitoring Dashboard">
+      {agentOnline && !agentOnline.online && (
+        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700">
+          <strong>Browser Agent offline.</strong> Evidence capture and contact discovery via Playwright are unavailable.
+          {agentOnline.configured ? ` (${agentOnline.reason})` : " Configure BROWSER_AGENT_URL + BROWSER_AGENT_TOKEN to enable."}
+        </div>
+      )}
       <div className="mb-6">
         <h1 className="font-display text-2xl font-semibold flex items-center gap-2"><Search className="h-6 w-6 text-primary" /> Monitoring Dashboard</h1>
         <p className="text-sm text-muted-foreground">One scan, every platform. Eterna fans out keyword + risk-suffix searches across YouTube, Instagram, Facebook, TikTok, X, Reddit, websites, news and blogs and surfaces them here in real time.</p>

@@ -1,0 +1,136 @@
+// Eterna AI Browser Agent — Express + Playwright
+// Compliance: public pages only; never bypasses login walls or CAPTCHA;
+// never auto-submits forms. Human approval is enforced by the Eterna app.
+import express from "express";
+import cors from "cors";
+import { chromium, type Browser } from "playwright";
+import { z } from "zod";
+import path from "node:path";
+import fs from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { investigateYouTube } from "./agents/youtube.agent.js";
+import { investigateInstagram } from "./agents/instagram.agent.js";
+import { discoverContacts } from "./agents/contact.agent.js";
+import { captureEvidence } from "./agents/evidence.agent.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const EVIDENCE_DIR = path.resolve(__dirname, "../evidence");
+const PORT = Number(process.env.PORT ?? 8090);
+const TOKEN = process.env.BROWSER_AGENT_TOKEN ?? "";
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL ?? `http://localhost:${PORT}`;
+
+await fs.mkdir(EVIDENCE_DIR, { recursive: true });
+
+// Single shared browser pool — created lazily, recycled on crash.
+let browserPromise: Promise<Browser> | null = null;
+async function getBrowser(): Promise<Browser> {
+  if (!browserPromise) {
+    browserPromise = chromium.launch({
+      headless: process.env.PW_HEADLESS !== "false",
+      args: ["--no-sandbox", "--disable-dev-shm-usage"],
+    });
+    browserPromise.then((b) => {
+      b.on("disconnected", () => { browserPromise = null; });
+    }).catch(() => { browserPromise = null; });
+  }
+  return browserPromise;
+}
+
+export interface AgentCtx {
+  browser: Browser;
+  evidenceDir: string;
+  publicBaseUrl: string;
+}
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: "2mb" }));
+app.use("/evidence", express.static(EVIDENCE_DIR, { maxAge: "1h" }));
+
+// ---- Auth middleware (Bearer token) ----
+app.use((req, res, next) => {
+  if (req.path === "/health") return next();
+  if (!TOKEN) return next(); // dev mode, no token configured
+  const h = req.header("authorization") ?? "";
+  if (h !== `Bearer ${TOKEN}`) return res.status(401).json({ error: "unauthorized" });
+  next();
+});
+
+app.get("/health", (_req, res) => res.json({ ok: true, service: "eterna-browser-agent" }));
+
+const YTSchema = z.object({
+  videoUrl: z.string().url().optional().or(z.literal("")),
+  channelUrl: z.string().url().optional().or(z.literal("")),
+  caseId: z.string().optional().default(""),
+}).refine((d) => d.videoUrl || d.channelUrl, { message: "videoUrl or channelUrl required" });
+
+app.post("/investigate/youtube", async (req, res) => {
+  const p = YTSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.message });
+  try {
+    const ctx: AgentCtx = { browser: await getBrowser(), evidenceDir: EVIDENCE_DIR, publicBaseUrl: PUBLIC_BASE_URL };
+    const out = await investigateYouTube(ctx, p.data);
+    res.json({ status: "success", ...out });
+  } catch (e) {
+    res.status(500).json({ status: "error", error: (e as Error).message });
+  }
+});
+
+const IGSchema = z.object({
+  profileUrl: z.string().url().optional().or(z.literal("")),
+  postUrl: z.string().url().optional().or(z.literal("")),
+  caseId: z.string().optional().default(""),
+}).refine((d) => d.profileUrl || d.postUrl, { message: "profileUrl or postUrl required" });
+
+app.post("/investigate/instagram", async (req, res) => {
+  const p = IGSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.message });
+  try {
+    const ctx: AgentCtx = { browser: await getBrowser(), evidenceDir: EVIDENCE_DIR, publicBaseUrl: PUBLIC_BASE_URL };
+    const out = await investigateInstagram(ctx, p.data);
+    res.json({ status: "success", ...out });
+  } catch (e) {
+    res.status(500).json({ status: "error", error: (e as Error).message });
+  }
+});
+
+const ContactSchema = z.object({
+  name: z.string().optional().default(""),
+  channelUrl: z.string().optional().default(""),
+  websiteUrl: z.string().optional().default(""),
+  socialLinks: z.array(z.string()).optional().default([]),
+});
+
+app.post("/discover-contact", async (req, res) => {
+  const p = ContactSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.message });
+  try {
+    const ctx: AgentCtx = { browser: await getBrowser(), evidenceDir: EVIDENCE_DIR, publicBaseUrl: PUBLIC_BASE_URL };
+    const out = await discoverContacts(ctx, p.data);
+    res.json({ status: "success", ...out });
+  } catch (e) {
+    res.status(500).json({ status: "error", error: (e as Error).message });
+  }
+});
+
+const EvidenceSchema = z.object({
+  url: z.string().url(),
+  caseId: z.string().optional().default(""),
+  type: z.enum(["youtube", "instagram", "website"]).default("website"),
+});
+
+app.post("/capture-evidence", async (req, res) => {
+  const p = EvidenceSchema.safeParse(req.body);
+  if (!p.success) return res.status(400).json({ error: p.error.message });
+  try {
+    const ctx: AgentCtx = { browser: await getBrowser(), evidenceDir: EVIDENCE_DIR, publicBaseUrl: PUBLIC_BASE_URL };
+    const out = await captureEvidence(ctx, p.data);
+    res.json({ status: "success", ...out });
+  } catch (e) {
+    res.status(500).json({ status: "error", error: (e as Error).message });
+  }
+});
+
+app.listen(PORT, () => {
+  console.log(`[eterna-browser-agent] listening on :${PORT} (public=${PUBLIC_BASE_URL})`);
+});
