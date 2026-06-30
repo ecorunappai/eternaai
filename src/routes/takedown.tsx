@@ -86,7 +86,7 @@ function TakedownPage() {
   }
 
   return (
-    <AppShell title="Takedown Center" subtitle="AI prepares legal complaints. A human approves every submission.">
+    <AppShell title="Takedown Center">
       <div className="grid lg:grid-cols-[1fr_1.4fr] gap-6">
         {/* LEFT — Prepare new takedown */}
         <section className="surface-card p-5 space-y-4">

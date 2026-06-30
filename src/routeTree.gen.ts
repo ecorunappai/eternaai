@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as YoutubeRouteImport } from './routes/youtube'
 import { Route as ViolationsRouteImport } from './routes/violations'
+import { Route as TakedownRouteImport } from './routes/takedown'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
@@ -34,6 +35,11 @@ const YoutubeRoute = YoutubeRouteImport.update({
 const ViolationsRoute = ViolationsRouteImport.update({
   id: '/violations',
   path: '/violations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TakedownRoute = TakedownRouteImport.update({
+  id: '/takedown',
+  path: '/takedown',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/monitoring': typeof MonitoringRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
+  '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/monitoring': typeof MonitoringRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
+  '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/monitoring': typeof MonitoringRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
+  '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/monitoring'
     | '/registry'
     | '/settings'
+    | '/takedown'
     | '/violations'
     | '/youtube'
     | '/api/chat'
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/monitoring'
     | '/registry'
     | '/settings'
+    | '/takedown'
     | '/violations'
     | '/youtube'
     | '/api/chat'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
     | '/monitoring'
     | '/registry'
     | '/settings'
+    | '/takedown'
     | '/violations'
     | '/youtube'
     | '/api/chat'
@@ -232,6 +244,7 @@ export interface RootRouteChildren {
   MonitoringRoute: typeof MonitoringRoute
   RegistryRoute: typeof RegistryRoute
   SettingsRoute: typeof SettingsRoute
+  TakedownRoute: typeof TakedownRoute
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
   ApiChatRoute: typeof ApiChatRoute
@@ -252,6 +265,13 @@ declare module '@tanstack/react-router' {
       path: '/violations'
       fullPath: '/violations'
       preLoaderRoute: typeof ViolationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/takedown': {
+      id: '/takedown'
+      path: '/takedown'
+      fullPath: '/takedown'
+      preLoaderRoute: typeof TakedownRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -368,6 +388,7 @@ const rootRouteChildren: RootRouteChildren = {
   MonitoringRoute: MonitoringRoute,
   RegistryRoute: RegistryRoute,
   SettingsRoute: SettingsRoute,
+  TakedownRoute: TakedownRoute,
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
   ApiChatRoute: ApiChatRoute,
