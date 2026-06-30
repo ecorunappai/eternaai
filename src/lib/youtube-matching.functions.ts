@@ -115,21 +115,32 @@ function collectYouTubeCandidates(html: string): Candidate[] {
       });
     }
   }
-  // Fallback: bare /watch?v= anchors in HTML when ytInitialData isn't present.
+  // Fallback: extract any youtube video IDs from arbitrary HTML
+  // (anchors, Google/DDG result links with encoded URLs, shorts URLs).
   if (out.size === 0) {
-    const anchor = /href="\/watch\?v=([A-Za-z0-9_-]{11})"[^>]*?(?:title="([^"]+)")?/g;
-    while ((m = anchor.exec(html)) !== null) {
-      const id = m[1];
-      if (out.has(id)) continue;
-      out.set(id, {
-        videoId: id,
-        url: `https://www.youtube.com/watch?v=${id}`,
-        thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-        title: m[2] ? decodeHtml(m[2]) : `YouTube video ${id}`,
-        channel: "Unknown channel",
-        isShort: false,
-        rank: rank++,
-      });
+    const patterns = [
+      /\/watch\?v=([A-Za-z0-9_-]{11})/g,
+      /youtube\.com%2Fwatch%3Fv%3D([A-Za-z0-9_-]{11})/g,
+      /youtu\.be\/([A-Za-z0-9_-]{11})/g,
+      /\/shorts\/([A-Za-z0-9_-]{11})/g,
+    ];
+    for (const re of patterns) {
+      while ((m = re.exec(html)) !== null) {
+        const id = m[1];
+        if (out.has(id)) continue;
+        const isShort = re.source.includes("shorts");
+        out.set(id, {
+          videoId: id,
+          url: isShort
+            ? `https://www.youtube.com/shorts/${id}`
+            : `https://www.youtube.com/watch?v=${id}`,
+          thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+          title: `YouTube ${isShort ? "Short" : "video"} ${id}`,
+          channel: "YouTube",
+          isShort,
+          rank: rank++,
+        });
+      }
     }
   }
   return Array.from(out.values()).sort((a, b) => a.rank - b.rank);
@@ -214,30 +225,52 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     if (!subject)
       throw new Error("Provide a search query (creator/celebrity name) or set an asset title.");
 
-    const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(subject)}`;
-
-    const fcRes = await fetch("https://api.firecrawl.dev/v2/scrape", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        url: ytUrl,
-        formats: ["html"],
-        onlyMainContent: false,
-        waitFor: 4500,
-        timeout: 45000,
-      }),
-    });
-    if (!fcRes.ok) {
-      const txt = await fcRes.text().catch(() => "");
-      throw new Error(`Firecrawl error (${fcRes.status}): ${txt.slice(0, 300)}`);
+    async function firecrawlHtml(url: string, waitFor = 3500): Promise<string> {
+      const r = await fetch("https://api.firecrawl.dev/v2/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          url, formats: ["html"], onlyMainContent: false, waitFor, timeout: 45000,
+        }),
+      });
+      if (!r.ok) {
+        const t = await r.text().catch(() => "");
+        throw new Error(`Firecrawl error (${r.status}): ${t.slice(0, 300)}`);
+      }
+      const j: any = await r.json();
+      const p = j?.data ?? j;
+      return typeof p?.html === "string" ? p.html : "";
     }
-    const fcJson: any = await fcRes.json();
-    const payload = fcJson?.data ?? fcJson;
-    const html: string = typeof payload?.html === "string" ? payload.html : "";
 
-    const candidates = collectYouTubeCandidates(html).slice(0, 10);
+    // Source 1: YouTube directly.
+    const sources = [
+      `https://www.youtube.com/results?search_query=${encodeURIComponent(subject)}`,
+      `https://m.youtube.com/results?search_query=${encodeURIComponent(subject)}`,
+      // Source 3: Google site-restricted search — robust fallback when YouTube blocks Firecrawl.
+      `https://www.google.com/search?q=${encodeURIComponent("site:youtube.com " + subject)}`,
+      `https://duckduckgo.com/html/?q=${encodeURIComponent("site:youtube.com " + subject)}`,
+    ];
+
+    let candidates: Candidate[] = [];
+    let lastErr = "";
+    for (const url of sources) {
+      try {
+        const html = await firecrawlHtml(url, url.includes("youtube.com") ? 4500 : 2500);
+        const found = collectYouTubeCandidates(html);
+        if (found.length > 0) {
+          candidates = found.slice(0, 10);
+          break;
+        }
+      } catch (e: any) {
+        lastErr = e?.message || String(e);
+      }
+    }
+
     if (candidates.length === 0) {
-      return { inserted: 0, matches: [], note: `No YouTube results found for "${subject}".` };
+      return {
+        inserted: 0, matches: [],
+        note: `No YouTube results found for "${subject}". ${lastErr ? "(" + lastErr + ")" : "YouTube/Google may be blocking the scrape — try a more specific name or retry."}`,
+      };
     }
 
     // AI multimodal verification per candidate (face + content + fair-use classification).
