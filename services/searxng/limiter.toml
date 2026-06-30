@@ -1,0 +1,6 @@
+[botdetection.ip_limit]
+# Trust the reverse proxy (Caddy) so per-IP limits work correctly.
+link_token = false
+
+[botdetection.ip_lists]
+pass_searxng_org = false

@@ -1,0 +1,40 @@
+# Automatic HTTPS via Let's Encrypt.
+# ${DOMAIN} and ${ACME_EMAIL} are injected from the .env file used by docker compose.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Lock down with a shared bearer token from the Eterna app.
+	# Set SEARXNG_BEARER in .env and as the Lovable secret SEARXNG_BEARER.
+	@unauthorized {
+		not header Authorization "Bearer {$SEARXNG_BEARER}"
+		path /search* /healthz*
+	}
+	# Comment the next line out if you want a fully public instance.
+	# respond @unauthorized "Unauthorized" 401
+
+	# CORS for the Eterna app
+	header {
+		Access-Control-Allow-Origin "*"
+		Access-Control-Allow-Methods "GET, POST, OPTIONS"
+		Access-Control-Allow-Headers "Authorization, Content-Type"
+		-Server
+	}
+
+	@options method OPTIONS
+	respond @options 204
+
+	reverse_proxy searxng:8080 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+}
+
+# Optional internal endpoint for browserless behind same cert
+# browser.{$DOMAIN} {
+# 	reverse_proxy browserless:3000
+# }

@@ -1,0 +1,123 @@
+# Eterna AI — production self-hosted stack
+# Run on any Linux VPS with Docker + Docker Compose v2:
+#   docker compose up -d
+#
+# Services
+#   caddy        ── HTTPS reverse proxy (auto Let's Encrypt)
+#   searxng      ── open-source meta-search (creator / news / IG / YT discovery)
+#   browserless  ── headless Chrome pool for AI Browser Agent + takedown autofill
+#   playwright   ── on-demand Playwright runner (evidence capture, form drafts)
+#   postgres     ── local case/evidence cache (separate from Lovable Cloud)
+#   redis        ── shared queue + SearXNG limiter store
+#
+# Required env in .env next to this file:
+#   DOMAIN=search.yourdomain.com
+#   ACME_EMAIL=ops@yourdomain.com
+#   SEARXNG_SECRET=<openssl rand -hex 32>
+#   POSTGRES_PASSWORD=<strong password>
+#   BROWSERLESS_TOKEN=<openssl rand -hex 32>
+#
+# After it's up, copy the public URL into the Eterna app secret SEARXNG_BASE_URL:
+#   https://${DOMAIN}
+
+name: eterna-stack
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: eterna-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./services/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - searxng
+      - browserless
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: eterna-searxng
+    restart: unless-stopped
+    expose:
+      - "8080"
+    environment:
+      - SEARXNG_BASE_URL=https://${DOMAIN}/
+      - SEARXNG_SECRET=${SEARXNG_SECRET}
+      - INSTANCE_NAME=Eterna AI Search
+      - UWSGI_WORKERS=4
+      - UWSGI_THREADS=8
+    volumes:
+      - ./services/searxng:/etc/searxng:rw
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID, DAC_OVERRIDE]
+    logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: eterna-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redis_data:/data
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: eterna-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=eterna
+      - POSTGRES_USER=eterna
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+
+  browserless:
+    # Headless Chrome pool. Used by the AI Browser Agent & takedown autofill.
+    image: ghcr.io/browserless/chromium:latest
+    container_name: eterna-browserless
+    restart: unless-stopped
+    environment:
+      - TOKEN=${BROWSERLESS_TOKEN}
+      - CONCURRENT=10
+      - QUEUED=20
+      - TIMEOUT=120000
+      - DATA_DIR=/tmp
+    expose:
+      - "3000"
+    shm_size: "2gb"
+
+  playwright:
+    # Long-running Playwright worker — pulls jobs from Redis (BullMQ) and runs
+    # evidence captures / autofill flows. Idle by default.
+    image: mcr.microsoft.com/playwright:v1.47.0-jammy
+    container_name: eterna-playwright
+    restart: unless-stopped
+    working_dir: /worker
+    command: ["sh", "-c", "tail -f /dev/null"]
+    environment:
+      - REDIS_URL=redis://redis:6379/1
+      - BROWSERLESS_URL=http://browserless:3000
+      - BROWSERLESS_TOKEN=${BROWSERLESS_TOKEN}
+    volumes:
+      - ./services/playwright:/worker
+    depends_on:
+      - redis
+      - browserless
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:
+  postgres_data:
