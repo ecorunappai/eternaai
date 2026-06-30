@@ -119,15 +119,8 @@ function TakedownPage() {
     finally { setYtBusy(null); }
   }
 
-  const ytStatusLabel = (() => {
-    if (!yt?.connection || yt.connection.status !== "connected") return "Not Connected";
-    if (!active) return "Connected";
-    if (active.youtube_report_status === "submitted" || active.status === "submitted") return "Submitted";
-    if (active.youtube_report_status === "waiting_user_review") return "Waiting User Review";
-    if (active.youtube_report_status === "prepared") return "Report Prepared";
-    if ((active.evidence_urls?.length ?? 0) > 0) return "Evidence Ready";
-    return "Connected";
-  })();
+
+
 
   async function refresh() {
     if (!user) return;
