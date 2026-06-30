@@ -364,13 +364,76 @@ function AgentConsolePage() {
         </div>
       </div>
 
-      {/* Status banner */}
-      {agentOnline && !agentOnline.online && (
-        <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm text-amber-700">
-          <strong>Browser Agent offline.</strong> Showing persisted history only.
-          {agentOnline.configured ? ` (${agentOnline.reason})` : " Configure BROWSER_AGENT_URL + BROWSER_AGENT_TOKEN to enable live runs."}
-        </div>
-      )}
+      {/* Status banner — categorized error states */}
+      {agentOnline && (() => {
+        if (agentOnline.online) {
+          return (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-800">
+              <span className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4" />
+                <strong>Browser Agent online.</strong>
+                <span className="text-emerald-700/80">Bearer auth verified · /health {agentOnline.latencyMs ?? "?"}ms</span>
+              </span>
+              <button
+                onClick={async () => {
+                  setTestingConn(true);
+                  try { const r = await status(); setAgentOnline(r); toast.success(`Agent reachable in ${r.latencyMs ?? "?"}ms`); }
+                  catch (e) { toast.error((e as Error).message); }
+                  finally { setTestingConn(false); }
+                }}
+                disabled={testingConn}
+                className="inline-flex items-center gap-1 rounded-md border border-emerald-600/30 bg-white px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-50 disabled:opacity-50"
+              >
+                {testingConn ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+                Test connection
+              </button>
+            </div>
+          );
+        }
+        const code = agentOnline.code ?? "offline";
+        const labels: Record<string, { title: string; hint: string; tone: string }> = {
+          not_configured:  { title: "Not configured",        hint: "Set BROWSER_AGENT_URL + BROWSER_AGENT_TOKEN secrets, then redeploy.",                      tone: "amber" },
+          token_missing:   { title: "Bearer token missing",  hint: "BROWSER_AGENT_TOKEN secret is empty. Generate one with `openssl rand -hex 32`.",            tone: "amber" },
+          unauthorized:    { title: "Token rejected",        hint: "The bearer token in Eterna doesn't match the worker's BROWSER_AGENT_TOKEN env var.",       tone: "destructive" },
+          launch_failed:   { title: "Launch failed",         hint: "Worker is up but Playwright couldn't open a browser. Check `docker logs eterna-browser-agent`.", tone: "destructive" },
+          timeout:         { title: "Agent unreachable",     hint: "Health probe timed out after 5s. Check VPS firewall, Caddy, and that port 8090 is exposed.", tone: "destructive" },
+          unreachable:     { title: "Agent unreachable",     hint: "DNS or TCP failure. Confirm BROWSER_AGENT_URL points to your VPS and the container is running.", tone: "destructive" },
+          http_error:      { title: "Unexpected response",   hint: agentOnline.reason ?? "Worker returned a non-2xx status.",                                   tone: "destructive" },
+          probe_failed:    { title: "Probe failed",          hint: "Status check threw client-side. Try Test connection.",                                     tone: "amber" },
+        };
+        const meta = labels[code] ?? { title: "Offline", hint: agentOnline.reason ?? "Unknown error", tone: "amber" };
+        const toneCls = meta.tone === "destructive"
+          ? "border-destructive/40 bg-destructive/10 text-destructive"
+          : "border-amber-500/40 bg-amber-500/10 text-amber-800";
+        return (
+          <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2 text-sm ${toneCls}`}>
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <strong>Browser Agent {meta.title.toLowerCase()}.</strong> Showing persisted history only.
+                <div className="text-xs opacity-80">{meta.hint}{agentOnline.reason && code !== "not_configured" ? ` — ${agentOnline.reason}` : ""}</div>
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                setTestingConn(true);
+                try {
+                  const r = await status();
+                  setAgentOnline(r);
+                  if (r.online) toast.success(`Agent reachable in ${r.latencyMs ?? "?"}ms`);
+                  else toast.error(`${r.code ?? "offline"}: ${r.reason ?? "unreachable"}`);
+                } catch (e) { toast.error((e as Error).message); }
+                finally { setTestingConn(false); }
+              }}
+              disabled={testingConn}
+              className="inline-flex items-center gap-1 rounded-md border border-current/30 bg-white px-2.5 py-1 text-xs font-medium hover:bg-white/80 disabled:opacity-50"
+            >
+              {testingConn ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+              Test connection
+            </button>
+          </div>
+        );
+      })()}
 
       {/* KPI strip */}
       <div className="mb-4 grid grid-cols-2 md:grid-cols-5 gap-2">
