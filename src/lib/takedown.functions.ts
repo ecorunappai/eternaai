@@ -199,7 +199,7 @@ export const reviewTakedown = createServerFn({ method: "POST" })
 
     switch (data.action) {
       case "approve_submit":
-        if ((t.missing_fields ?? []).length) throw new Error("Cannot start takedown. Missing required evidence.");
+        if (((t.missing_fields as unknown[]) ?? []).length) throw new Error("Cannot start takedown. Missing required evidence.");
         patch.status = "submitted";
         patch.approved_at = new Date().toISOString();
         patch.approved_by = data.approver ?? "manager";
