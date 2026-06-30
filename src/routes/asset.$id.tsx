@@ -37,6 +37,8 @@ function AssetPage() {
   const [official, setOfficial] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [liveJob, setLiveJob] = useState<any>(null);
   const [tab, setTab] = useState<string>("overview");
   const [scanning, setScanning] = useState(false);
   const scanFn = useServerFn(runYouTubeScan);
@@ -49,7 +51,7 @@ function AssetPage() {
       const { data: signed } = await supabase.storage.from("assets").createSignedUrl(a.storage_path, 3600);
       setThumb(signed?.signedUrl ?? null);
     }
-    const [p, c, m, v, o, ct, cs] = await Promise.all([
+    const [p, c, m, v, o, ct, cs, sj] = await Promise.all([
       supabase.from("monitoring_profiles").select("*").eq("asset_id", id).maybeSingle(),
       supabase.from("certificates").select("*").eq("asset_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("discovered_matches").select("*").eq("asset_id", id).order("created_at", { ascending: false }).limit(500),
@@ -57,9 +59,13 @@ function AssetPage() {
       supabase.from("owned_accounts").select("*").order("created_at", { ascending: false }),
       supabase.from("creator_contacts").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("enforcement_cases").select("*").order("created_at", { ascending: false }).limit(100),
+      supabase.from("scan_jobs").select("*").eq("asset_id", id).order("started_at", { ascending: false }).limit(25),
     ]);
     setProfile(p.data); setCert(c.data); setMatches(m.data ?? []); setViolations(v.data ?? []);
     setOfficial(o.data ?? []); setContacts(ct.data ?? []); setCases(cs.data ?? []);
+    setJobs(sj.data ?? []);
+    const running = (sj.data ?? []).find((j: any) => j.status === "running");
+    setLiveJob(running ?? null);
   }
   useEffect(() => { if (user && id) load(); }, [user, id]);
 
