@@ -1024,6 +1024,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      verify_certificate: {
+        Args: { _cert_number: string }
+        Returns: {
+          asset_sha256: string
+          asset_title: string
+          asset_type: string
+          certificate_number: string
+          issued_at: string
+          owner_name: string
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "user"
