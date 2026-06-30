@@ -312,7 +312,7 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
       const job = jobs[0];
       const enq = await enqueueViaWorker({
         type: job.worker_task_type,
-        input: { ...(job.config ?? {}), monitoringJobId: job.id },
+        input: { ...((job.config ?? {}) as Record<string, unknown>), monitoringJobId: job.id },
       });
       if (enq.offline) continue;
       await supabaseAdmin.from("agent_tasks").upsert(
