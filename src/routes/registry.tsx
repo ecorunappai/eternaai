@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch, ShieldCheck, X, Sparkles, Youtube, Instagram, Tag } from "lucide-react";
+import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch, ShieldCheck, X, Sparkles, Youtube, Instagram, Tag, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { hashImageFile, extractVideoKeyframes } from "@/lib/perceptual-hash";
 import { runYouTubeScan } from "@/lib/youtube-matching.functions";
+import { runWebScanEverywhere } from "@/lib/web-scan.functions";
 
 export const Route = createFileRoute("/registry")({
   head: () => ({ meta: [{ title: "Content Registry — Eterna AI" }] }),
@@ -35,17 +36,49 @@ function Registry() {
   const [assets, setAssets] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
   const [setupAsset, setSetupAsset] = useState<any | null>(null);
+  const [scanningId, setScanningId] = useState<string | null>(null);
   const [autoScanDefault, setAutoScanDefault] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
     return localStorage.getItem(AUTO_SCAN_KEY) !== "0";
   });
   const fileRef = useRef<HTMLInputElement>(null);
+  const webScanFn = useServerFn(runWebScanEverywhere);
+  const ytScanFn = useServerFn(runYouTubeScan);
 
   async function load() {
     const { data } = await supabase.from("assets").select("*").order("created_at", { ascending: false });
     setAssets(data ?? []);
   }
   useEffect(() => { if (user) load(); }, [user]);
+
+  async function searchEverywhere(a: any) {
+    setScanningId(a.id);
+    toast.message(`Searching all sites for "${a.title}"…`);
+    try {
+      // Get creator name from monitoring profile if available, else fallback to asset title
+      const { data: prof } = await supabase.from("monitoring_profiles")
+        .select("creator_name").eq("asset_id", a.id).maybeSingle();
+      const query = (prof?.creator_name ?? a.title ?? "").trim();
+      if (!query) {
+        toast.error("Set up a monitoring profile (creator/brand name) first.");
+        setSetupAsset(a);
+        return;
+      }
+      // Run web + YouTube scans in parallel
+      const [web, yt] = await Promise.allSettled([
+        webScanFn({ data: { assetId: a.id, query } }),
+        ytScanFn({ data: { assetId: a.id, query } }),
+      ]);
+      const webNew = web.status === "fulfilled" ? ((web.value as any).new_count ?? 0) : 0;
+      const ytNew = yt.status === "fulfilled" ? ((yt.value as any).new_count ?? (yt.value as any).inserted ?? 0) : 0;
+      const webTotal = web.status === "fulfilled" ? ((web.value as any).total ?? 0) : 0;
+      toast.success(`Found ${webNew + ytNew} new results · Web: ${webTotal}, YouTube scan ran.`);
+      if (web.status === "rejected") toast.error("Web scan: " + (web.reason as Error).message);
+      if (yt.status === "rejected") toast.error("YouTube scan: " + (yt.reason as Error).message);
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setScanningId(null); }
+  }
+
 
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -165,6 +198,10 @@ function Registry() {
                   <td className="p-3"><span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">● {a.status}</span></td>
                   <td className="p-3 text-muted-foreground text-xs">{new Date(a.created_at).toLocaleDateString()}</td>
                   <td className="p-3 text-right whitespace-nowrap">
+                    <button onClick={() => searchEverywhere(a)} disabled={scanningId === a.id} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3 disabled:opacity-50">
+                      {scanningId === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Globe className="h-3 w-3" />}
+                      {scanningId === a.id ? "Searching…" : "Search Everywhere"}
+                    </button>
                     <button onClick={() => setSetupAsset(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ShieldCheck className="h-3 w-3" />Protect</button>
                     <Link to="/asset/$id" params={{ id: a.id }} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ScanSearch className="h-3 w-3" />Open</Link>
                     <button onClick={() => issueCert(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ExternalLink className="h-3 w-3" />Cert</button>
