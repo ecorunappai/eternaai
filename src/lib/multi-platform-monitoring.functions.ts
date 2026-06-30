@@ -113,14 +113,15 @@ function profileUrlFor(platform: string, url: string): string | null {
   } catch { return null; }
 }
 
-type SearchHit = { url: string; title: string; description?: string };
+type SearchHit = { url: string; title: string; description?: string; preview?: string | null; createdAt?: string | null };
 
 async function firecrawlSearch(apiKey: string, query: string, limit = 10): Promise<SearchHit[]> {
   try {
     const r = await fetch("https://api.firecrawl.dev/v2/search", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ query, limit, sources: ["web", "news"] }),
+      // tbs: qdr:m -> Google "past month" filter for fresher results.
+      body: JSON.stringify({ query, limit, sources: ["web", "news"], tbs: "qdr:m" }),
     });
     if (!r.ok) return [];
     const j: any = await r.json();
@@ -129,13 +130,52 @@ async function firecrawlSearch(apiKey: string, query: string, limit = 10): Promi
     const push = (arr: any[]) => {
       for (const it of arr ?? []) {
         if (!it?.url) continue;
-        out.push({ url: it.url, title: String(it.title ?? it.url), description: String(it.description ?? it.snippet ?? "") });
+        out.push({
+          url: it.url,
+          title: String(it.title ?? it.url),
+          description: String(it.description ?? it.snippet ?? ""),
+          createdAt: it.date ?? it.publishedDate ?? null,
+        });
       }
     };
     if (Array.isArray(data)) push(data);
     else { push(data?.web ?? []); push(data?.news ?? []); }
     return out;
   } catch { return []; }
+}
+
+// Reddit-native search via public JSON endpoint. Sorted by NEW for accurate latest results,
+// with real thumbnails and post timestamps that Google Lens / site:reddit.com cannot give us.
+async function redditNativeSearch(subject: string, limit = 25): Promise<SearchHit[]> {
+  const out: SearchHit[] = [];
+  const sorts: Array<"new" | "relevance"> = ["new", "relevance"];
+  for (const sort of sorts) {
+    try {
+      const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(`"${subject}"`)}&sort=${sort}&t=month&limit=${limit}&raw_json=1`;
+      const r = await fetch(url, { headers: { "User-Agent": "EternaAI-Monitor/1.0 (+https://eternaai.lovable.app)" } });
+      if (!r.ok) continue;
+      const j: any = await r.json();
+      const children: any[] = j?.data?.children ?? [];
+      for (const c of children) {
+        const d = c?.data; if (!d?.permalink) continue;
+        const fullUrl = `https://www.reddit.com${d.permalink}`;
+        const preview = d.thumbnail && /^https?:\/\//.test(d.thumbnail)
+          ? d.thumbnail
+          : (d.preview?.images?.[0]?.source?.url?.replace(/&amp;/g, "&") ?? null);
+        out.push({
+          url: fullUrl,
+          title: String(d.title ?? "Reddit post"),
+          description: String(d.selftext ?? "").slice(0, 280),
+          preview,
+          createdAt: d.created_utc ? new Date(d.created_utc * 1000).toISOString() : null,
+        });
+      }
+    } catch { /* try next sort */ }
+  }
+  // Dedupe by url, preserve newest-first order (sort=new ran first).
+  const seen = new Set<string>(); const dedup: SearchHit[] = [];
+  for (const h of out) { if (seen.has(h.url)) continue; seen.add(h.url); dedup.push(h); }
+  return dedup;
 }
 
 export const runMultiPlatformScan = createServerFn({ method: "POST" })
@@ -154,8 +194,13 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
       if (!asset || asset.user_id !== userId) throw new Error("Asset not found");
     }
 
-    // Fan out one Firecrawl search per platform in parallel.
+    // Fan out one search per platform in parallel.
     const perPlatform = await Promise.all(PLATFORMS.map(async (p) => {
+      // Reddit: use native sorted-by-new JSON endpoint for accurate latest results.
+      if (p.id === "Reddit") {
+        const hits = await redditNativeSearch(subject, 25);
+        return { platform: p, hits };
+      }
       const hits = await firecrawlSearch(apiKey, p.buildQuery(subject), 10);
       const filtered = hits.filter((h) => p.urlFilter(h.url));
       return { platform: p, hits: filtered };
@@ -186,7 +231,7 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
           source_url: h.url,
           platform: platform.id,
           domain: host || platform.domain || null,
-          preview_url: null,
+          preview_url: h.preview ?? null,
           channel_name: profileUrl ?? host ?? platform.label,
           video_title: h.title.slice(0, 200),
           video_id: null,
