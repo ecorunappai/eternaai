@@ -54,7 +54,14 @@ export async function runYouTube(ctx: RunCtx, input: any) {
         searchResults.push(r);
       }
       setExtracted(taskId, { searchResults });
-      appendStep(taskId, { phase: "extract", note: `Collected ${searchResults.length} search result(s)` });
+      const extractShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "extract");
+      appendStep(taskId, { phase: "extract", note: `Collected ${searchResults.length} search result(s)`, screenshot: extractShot });
+
+      // Scroll once so the live view shows real activity, then re-frame.
+      await page.mouse.wheel(0, 900).catch(() => {});
+      await page.waitForTimeout(1200);
+      const scrollShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "scroll");
+      appendStep(taskId, { phase: "extract", note: "Scrolled results", screenshot: scrollShot });
 
       // First channel link
       const firstChannel = await page.locator('a[href*="/channel/"], a[href*="/@"]').first().getAttribute("href").catch(() => null);
