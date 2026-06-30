@@ -99,7 +99,9 @@ function YouTubeDash() {
     if (tb !== ta) return tb - ta;
     return Number(b.final_confidence_score ?? 0) - Number(a.final_confidence_score ?? 0);
   });
-  const visible = sorted.filter((m) => filter === "all" || m.asset_id === filter);
+  const visible = sorted
+    .filter((m) => filter === "all" || m.asset_id === filter)
+    .filter((m) => platformFilter === "All" || (m.platform ?? "Website") === platformFilter);
 
   // Per-platform counters across visible results.
   const counters: Record<string, number> = {};
