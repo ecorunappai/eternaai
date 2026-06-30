@@ -28,6 +28,8 @@ const FAIR_USE_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 const TABS: Array<{ id: string; label: string }> = [
+  { id: "latest", label: "Latest Videos" },
+  { id: "new_today", label: "New Discoveries" },
   { id: "official", label: "Official Content" },
   { id: "reupload", label: "Suspected Reupload" },
   { id: "reaction", label: "Reaction" },
@@ -36,6 +38,7 @@ const TABS: Array<{ id: string; label: string }> = [
   { id: "fan", label: "Fan / Edit" },
   { id: "impersonation", label: "Impersonation" },
   { id: "needs_review", label: "Needs Review" },
+  { id: "historical", label: "Historical (2020–2024)" },
   { id: "all", label: "All" },
 ];
 
@@ -52,7 +55,7 @@ function YouTubeDash() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [selectedAsset, setSelectedAsset] = useState<string>("");
   const [query, setQuery] = useState<string>("");
-  const [tab, setTab] = useState<string>("official");
+  const [tab, setTab] = useState<string>("latest");
   const [scanning, setScanning] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [segmentScanId, setSegmentScanId] = useState<string | null>(null);
@@ -67,7 +70,7 @@ function YouTubeDash() {
   async function load() {
     const [a, m, segs] = await Promise.all([
       supabase.from("assets").select("id,title,asset_type,storage_path").eq("asset_type", "image").order("created_at", { ascending: false }),
-      supabase.from("discovered_matches").select("*").eq("discovered_via", "youtube_firecrawl_ai_verified").order("final_confidence_score", { ascending: false }),
+      supabase.from("discovered_matches").select("*").eq("discovered_via", "youtube_firecrawl_ai_verified").order("created_at", { ascending: false }).limit(2000),
       supabase.from("video_segments").select("*").order("confidence", { ascending: false }),
     ]);
     const list = a.data ?? [];
@@ -87,30 +90,53 @@ function YouTubeDash() {
   }
   useEffect(() => { if (user) load(); }, [user]);
 
+  const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }, []);
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: matches.length };
+    const c: Record<string, number> = { all: matches.length, latest: matches.length };
+    let newToday = 0, historical = 0;
     for (const m of matches) {
       const cat = m.is_owned ? "official" : (m.result_category ?? "needs_review");
       c[cat] = (c[cat] ?? 0) + 1;
+      const created = new Date(m.created_at).getTime();
+      if (created >= todayStart) newToday++;
+      if (/\b20(20|21|22|23|24)\b/.test(String(m.notes ?? ""))) historical++;
     }
+    c.new_today = newToday;
+    c.historical = historical;
     return c;
-  }, [matches]);
+  }, [matches, todayStart]);
 
-  const visible = useMemo(() => matches.filter((m) => {
-    if (tab === "all") return true;
-    if (tab === "official") return m.is_owned || m.result_category === "official";
-    return !m.is_owned && (m.result_category ?? "needs_review") === tab;
-  }), [matches, tab]);
+  const stats = useMemo(() => {
+    const channels = new Set<string>();
+    let newToday = 0; let last = 0;
+    for (const m of matches) {
+      if (m.channel_name) channels.add(m.channel_name);
+      const t = new Date(m.created_at).getTime();
+      if (t >= todayStart) newToday++;
+      if (t > last) last = t;
+    }
+    return { total: matches.length, channels: channels.size, newToday, last };
+  }, [matches, todayStart]);
+
+  const visible = useMemo(() => {
+    if (tab === "all" || tab === "latest") return matches;
+    if (tab === "new_today") return matches.filter(m => new Date(m.created_at).getTime() >= todayStart);
+    if (tab === "historical") return matches.filter(m => /\b20(20|21|22|23|24)\b/.test(String(m.notes ?? "")));
+    if (tab === "official") return matches.filter(m => m.is_owned || m.result_category === "official");
+    return matches.filter(m => !m.is_owned && (m.result_category ?? "needs_review") === tab);
+  }, [matches, tab, todayStart]);
 
   async function onScan() {
     if (!selectedAsset) return toast.error("Select a registered face/reference image first.");
     if (!query.trim()) return toast.error("Enter a creator / celebrity name to discover videos.");
     setScanning(true);
     try {
-      const r = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
-      if (r.inserted === 0) toast.message((r as any).note ?? "No matches");
-      else {
-        toast.success(`${r.inserted} suspected videos across ${(r as any).variants ?? 0} variants. Classifying…`);
+      const r: any = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
+      if ((r.inserted ?? 0) === 0 && (r.candidates_found ?? 0) === 0) {
+        toast.message(r.note ?? "No matches");
+      } else {
+        toast.success(`+${r.new_count ?? r.inserted} new · ${r.duplicates_skipped ?? 0} duplicates skipped · ${r.passes_run ?? 0} discovery passes · total ${r.total ?? r.inserted}.`);
         await classifyFn({ data: { subject: query.trim() } });
       }
       load();
@@ -170,6 +196,13 @@ function YouTubeDash() {
         <button onClick={async () => { await classifyFn({ data: {} }); toast.success("Re-classified"); load(); }} className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-accent">
           <RefreshCw className="h-3.5 w-3.5" /> Re-classify
         </button>
+      </div>
+
+      <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="Total Videos Found" value={stats.total.toLocaleString()} />
+        <StatCard label="Channels Found" value={stats.channels.toLocaleString()} />
+        <StatCard label="New Today" value={stats.newToday.toLocaleString()} accent />
+        <StatCard label="Last Scan" value={stats.last ? new Date(stats.last).toLocaleString() : "—"} />
       </div>
 
       <div className="mb-6 rounded-xl border border-border bg-card p-5">
@@ -346,6 +379,15 @@ function Score({ label, v, bold }: { label: string; v: number; bold?: boolean })
     <div className="rounded-md border border-border bg-background px-2 py-1.5">
       <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className={`${bold ? "font-bold" : "font-semibold"} ${color}`}>{n.toFixed(0)}%</div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={`rounded-xl border ${accent ? "border-primary/40 bg-primary/5" : "border-border bg-card"} p-4`}>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`mt-1 text-xl font-semibold ${accent ? "text-primary" : ""}`}>{value}</div>
     </div>
   );
 }
