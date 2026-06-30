@@ -170,7 +170,7 @@ function TakedownPage() {
                 </div>
               ) : !active.warning_sent_at ? (
                 <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800 flex gap-2">
-                  <Info className="h-4 w-4 shrink-0" />
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
                   <div>
                     <div className="font-semibold">No public contact found. Warning email skipped.</div>
                     <div className="mt-1">Platform takedown can proceed. Contact search failure is recorded as contact attempt proof.</div>
