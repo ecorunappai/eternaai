@@ -27,6 +27,9 @@ type Candidate = {
   isShort: boolean;
   rank: number;
   matchedKeyword: string;
+  publishedText?: string;
+  recencyHours?: number;
+  viewCount?: number;
 };
 
 const VerificationSchema = z.object({
