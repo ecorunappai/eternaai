@@ -233,6 +233,10 @@ function YouTubeDash() {
               const risk = riskBadge(m.risk_level);
               const fair = FAIR_USE_BADGE[m.fair_use_flag ?? "not_applicable"] ?? FAIR_USE_BADGE.not_applicable;
               const assetThumb = thumbs[m.asset_id];
+              const platform = (m.platform ?? "Website") as string;
+              const pmeta = PLATFORM_META[platform] ?? PLATFORM_META.Website;
+              const PIcon = pmeta.Icon;
+              const profileUrl = /PROFILE:([^|]+)/.exec(m.notes ?? "")?.[1]?.trim() || null;
               return (
                 <li key={m.id} className="p-5 hover:bg-accent/20">
                   <div className="flex items-start gap-4">
@@ -244,12 +248,19 @@ function YouTubeDash() {
                         </div>
                       ) : null}
                       <div className="text-center">
-                        <img src={m.preview_url} alt={m.video_title} loading="lazy" className="h-24 w-40 rounded-lg object-cover border border-border bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0.3"; }} />
-                        <div className="mt-1 text-[9px] uppercase tracking-wider text-muted-foreground">{m.match_type === "youtube_short" ? "Short" : "Video"}</div>
+                        {m.preview_url ? (
+                          <img src={m.preview_url} alt={m.video_title} loading="lazy" className="h-24 w-40 rounded-lg object-cover border border-border bg-muted" onError={(e) => { (e.target as HTMLImageElement).style.opacity = "0.3"; }} />
+                        ) : (
+                          <div className={`h-24 w-40 rounded-lg border flex items-center justify-center ${pmeta.bg}`}>
+                            <PIcon className={`h-10 w-10 ${pmeta.color}`} />
+                          </div>
+                        )}
+                        <div className="mt-1 text-[9px] uppercase tracking-wider text-muted-foreground">{platform}</div>
                       </div>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
+                        <PlatformBadge platform={platform} />
                         <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${risk.className}`}>{risk.label}</span>
                         <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${fair.className}`}><Scale className="h-3 w-3" />{fair.label}</span>
                         {m.violation_category && m.violation_category !== "unrelated" && (
