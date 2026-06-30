@@ -471,7 +471,24 @@ function YouTubeDash() {
                         {segs.length > 0 && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 text-destructive border border-destructive/30 px-2 py-0.5 text-[10px] font-semibold"><Film className="h-3 w-3" /> {segs.length} matched segment{segs.length === 1 ? "" : "s"}</span>
                         )}
-                        <span className="ml-auto text-xs text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                        <span className="ml-auto flex items-center gap-1.5 text-xs">
+                          {m.published_at && (
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                              (Number(m.recency_hours ?? 9999) <= 24) ? "bg-destructive/10 text-destructive border-destructive/30"
+                              : (Number(m.recency_hours ?? 9999) <= 24*7) ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                              : "bg-muted text-muted-foreground border-border"
+                            }`}>
+                              <Clock className="inline h-3 w-3 mr-0.5" /> {formatRelative(m.published_at)}
+                            </span>
+                          )}
+                          {Number(m.trending_score ?? 0) >= 40 && (
+                            <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">🔥 {Math.round(Number(m.trending_score))}</span>
+                          )}
+                          {m.view_count != null && (
+                            <span className="text-[10px] text-muted-foreground">{Number(m.view_count).toLocaleString()} views</span>
+                          )}
+                          <span className="text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                        </span>
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
