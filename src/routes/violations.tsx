@@ -1,97 +1,135 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { Plus, AlertOctagon, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
-import { AlertOctagon, ExternalLink, Filter } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/violations")({
-  head: () => ({ meta: [{ title: "Violation Center — Eterna AI" }, { name: "description", content: "Review, triage and enforce action on detected violations." }] }),
+  head: () => ({ meta: [{ title: "Violations — Eterna AI" }] }),
   component: Violations,
 });
 
-const cases = [
-  { id: "VIO-8821", platform: "Instagram", asset: "Hero portrait #214", sim: 96, threat: "High", status: "Enforcement", date: "2h ago" },
-  { id: "VIO-8814", platform: "TikTok", asset: "Brand reel — launch", sim: 92, threat: "Critical", status: "Warning Sent", date: "4h ago" },
-  { id: "VIO-8807", platform: "YouTube", asset: "Podcast ep. 14", sim: 88, threat: "Medium", status: "Under Review", date: "9h ago" },
-  { id: "VIO-8799", platform: "Website", asset: "Product photo set", sim: 99, threat: "Critical", status: "Detected", date: "12h ago" },
-  { id: "VIO-8782", platform: "X", asset: "Profile identity", sim: 84, threat: "High", status: "Removed", date: "1d ago" },
-  { id: "VIO-8771", platform: "Facebook", asset: "Campaign artwork", sim: 79, threat: "Medium", status: "Resolved", date: "2d ago" },
-  { id: "VIO-8760", platform: "TikTok", asset: "Tutorial short #8", sim: 91, threat: "High", status: "Enforcement", date: "3d ago" },
-];
-
-const threatColor = (t: string) =>
-  t === "Critical" ? "bg-destructive/10 text-destructive" :
-  t === "High" ? "bg-warning/15 text-warning-foreground" :
-  t === "Medium" ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground";
+const THREAT = { low: "bg-yellow-500/10 text-yellow-700", medium: "bg-orange-500/10 text-orange-700", high: "bg-red-500/10 text-red-700", critical: "bg-destructive/15 text-destructive" };
 
 function Violations() {
+  const { user } = useAuth();
+  const [rows, setRows] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<string>("all");
+
+  const [form, setForm] = useState({ platform: "Instagram", infringing_url: "", threat_level: "medium", notes: "", similarity_score: "" });
+
+  async function load() {
+    let q = supabase.from("violations").select("*").order("detected_at", { ascending: false });
+    if (filter !== "all") q = q.eq("status", filter);
+    const { data } = await q;
+    setRows(data ?? []);
+  }
+  useEffect(() => { if (user) load(); }, [user, filter]);
+
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    if (!user) return;
+    setBusy(true);
+    const { error } = await supabase.from("violations").insert({
+      user_id: user.id, platform: form.platform, infringing_url: form.infringing_url,
+      threat_level: form.threat_level, notes: form.notes,
+      similarity_score: form.similarity_score ? Number(form.similarity_score) : null,
+    });
+    setBusy(false);
+    if (error) toast.error(error.message);
+    else { toast.success("Violation logged"); setOpen(false); setForm({ platform: "Instagram", infringing_url: "", threat_level: "medium", notes: "", similarity_score: "" }); load(); }
+  }
+
+  async function updateStatus(id: string, status: string) {
+    const { error } = await supabase.from("violations").update({ status, updated_at: new Date().toISOString() }).eq("id", id);
+    if (error) toast.error(error.message); else { toast.success(`Marked ${status}`); load(); }
+  }
+
+  async function remove(id: string) {
+    if (!confirm("Delete this case?")) return;
+    await supabase.from("violations").delete().eq("id", id);
+    load();
+  }
+
+  const filters = ["all", "open", "in_review", "enforcement_sent", "resolved", "dismissed"];
+
   return (
-    <AppShell breadcrumb="Violation Center">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+    <AppShell title="Violations">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold">Violation Center</h1>
-          <p className="text-sm text-muted-foreground">Every detection becomes a case with evidence, screenshots and a clear next step.</p>
+          <h1 className="font-display text-2xl font-semibold">Violations</h1>
+          <p className="text-sm text-muted-foreground">Track infringements, evidence and enforcement progress.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-2 rounded-lg border border-input bg-card px-3 h-10 text-sm hover:bg-accent"><Filter className="h-4 w-4" /> Filter</button>
-          <button className="inline-flex items-center gap-2 rounded-lg px-4 h-10 text-sm font-semibold text-primary-foreground" style={{ background: "var(--gradient-violet)" }}>Bulk enforce</button>
-        </div>
+        <button onClick={() => setOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold text-primary-foreground" style={{ background: "var(--gradient-violet)" }}>
+          <Plus className="h-4 w-4" /> Log Violation
+        </button>
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        {[
-          { label: "Open cases", value: "47" },
-          { label: "Critical", value: "8", tone: "text-destructive" },
-          { label: "Awaiting review", value: "14" },
-          { label: "Resolved (30d)", value: "182", tone: "text-success" },
-        ].map((s) => (
-          <div key={s.label} className="surface-card p-5">
-            <AlertOctagon className="h-5 w-5 text-primary" />
-            <div className={`mt-3 font-display text-2xl font-semibold ${s.tone ?? ""}`}>{s.value}</div>
-            <div className="text-xs text-muted-foreground">{s.label}</div>
-          </div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {filters.map((f) => (
+          <button key={f} onClick={() => setFilter(f)} className={`rounded-full border px-3 py-1 text-xs font-medium capitalize ${filter === f ? "bg-primary text-primary-foreground border-primary" : "border-border bg-card text-muted-foreground hover:bg-accent"}`}>{f.replace("_", " ")}</button>
         ))}
       </div>
 
-      <div className="mt-6 surface-card overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="px-6 py-3 font-semibold">Case</th>
-              <th className="px-4 py-3 font-semibold">Platform</th>
-              <th className="px-4 py-3 font-semibold">Asset</th>
-              <th className="px-4 py-3 font-semibold">Similarity</th>
-              <th className="px-4 py-3 font-semibold">Threat</th>
-              <th className="px-4 py-3 font-semibold">Status</th>
-              <th className="px-4 py-3 font-semibold">Detected</th>
-              <th className="px-6 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {cases.map((v) => (
-              <tr key={v.id} className="border-b border-border last:border-0 hover:bg-muted/40">
-                <td className="px-6 py-3.5 font-mono text-xs font-semibold">{v.id}</td>
-                <td className="px-4 py-3.5 text-xs">{v.platform}</td>
-                <td className="px-4 py-3.5 text-xs">{v.asset}</td>
-                <td className="px-4 py-3.5">
-                  <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full" style={{ width: `${v.sim}%`, background: "var(--gradient-violet)" }} />
-                    </div>
-                    <span className="text-xs font-medium">{v.sim}%</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3.5"><span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${threatColor(v.threat)}`}>{v.threat}</span></td>
-                <td className="px-4 py-3.5 text-xs">{v.status}</td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground">{v.date}</td>
-                <td className="px-6 py-3.5 text-right">
-                  <button className="inline-flex items-center gap-1 rounded-md border border-input bg-card px-2.5 py-1 text-xs font-medium hover:bg-accent">
-                    Open <ExternalLink className="h-3 w-3" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        {rows.length === 0 ? (
+          <div className="py-16 text-center">
+            <AlertOctagon className="mx-auto h-10 w-10 text-muted-foreground" />
+            <div className="mt-3 font-medium">No violations</div>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+              <tr><th className="text-left p-3">Platform</th><th className="text-left p-3">Infringing URL</th><th className="text-left p-3">Threat</th><th className="text-left p-3">Status</th><th className="text-left p-3">Detected</th><th className="p-3"></th></tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.map((v) => (
+                <tr key={v.id} className="hover:bg-accent/30">
+                  <td className="p-3 font-medium">{v.platform}</td>
+                  <td className="p-3 max-w-md truncate"><a href={v.infringing_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">{v.infringing_url}</a></td>
+                  <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${THREAT[v.threat_level as keyof typeof THREAT]}`}>{v.threat_level}</span></td>
+                  <td className="p-3">
+                    <select value={v.status} onChange={(e) => updateStatus(v.id, e.target.value)} className="rounded-md border border-input bg-background px-2 py-1 text-xs capitalize">
+                      {filters.slice(1).map((s) => <option key={s} value={s}>{s.replace("_", " ")}</option>)}
+                    </select>
+                  </td>
+                  <td className="p-3 text-muted-foreground text-xs">{new Date(v.detected_at).toLocaleDateString()}</td>
+                  <td className="p-3 text-right"><button onClick={() => remove(v.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {open && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" onClick={() => setOpen(false)}>
+          <form onClick={(e) => e.stopPropagation()} onSubmit={create} className="w-full max-w-md rounded-2xl border border-border bg-card p-6 space-y-3">
+            <h3 className="font-display text-lg font-semibold">Log a violation</h3>
+            <select value={form.platform} onChange={(e) => setForm({ ...form, platform: e.target.value })} className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm">
+              {["Instagram", "YouTube", "TikTok", "X", "Facebook", "Reddit", "Web", "Marketplace"].map(p => <option key={p}>{p}</option>)}
+            </select>
+            <input required type="url" placeholder="https://..." value={form.infringing_url} onChange={(e) => setForm({ ...form, infringing_url: e.target.value })} className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm" />
+            <div className="grid grid-cols-2 gap-2">
+              <select value={form.threat_level} onChange={(e) => setForm({ ...form, threat_level: e.target.value })} className="h-10 rounded-lg border border-input bg-background px-3 text-sm">
+                {["low", "medium", "high", "critical"].map(p => <option key={p}>{p}</option>)}
+              </select>
+              <input type="number" min={0} max={100} placeholder="Similarity %" value={form.similarity_score} onChange={(e) => setForm({ ...form, similarity_score: e.target.value })} className="h-10 rounded-lg border border-input bg-background px-3 text-sm" />
+            </div>
+            <textarea rows={3} placeholder="Notes / evidence" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="w-full rounded-lg border border-input bg-background p-3 text-sm" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setOpen(false)} className="h-10 rounded-lg border border-input px-4 text-sm">Cancel</button>
+              <button disabled={busy} className="h-10 rounded-lg px-4 text-sm font-semibold text-primary-foreground inline-flex items-center gap-2" style={{ background: "var(--gradient-violet)" }}>
+                {busy && <Loader2 className="h-4 w-4 animate-spin" />} Save
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </AppShell>
   );
 }
