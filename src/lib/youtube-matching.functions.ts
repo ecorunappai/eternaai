@@ -12,7 +12,7 @@ import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 
 const ScanInput = z.object({
-  assetId: z.string().uuid().optional(),
+  assetId: z.string().uuid(),
   query: z.string().trim().min(2).max(120),
 });
 
