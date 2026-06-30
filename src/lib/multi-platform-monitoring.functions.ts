@@ -231,7 +231,7 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
           source_url: h.url,
           platform: platform.id,
           domain: host || platform.domain || null,
-          preview_url: null,
+          preview_url: h.preview ?? null,
           channel_name: profileUrl ?? host ?? platform.label,
           video_title: h.title.slice(0, 200),
           video_id: null,
