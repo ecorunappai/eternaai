@@ -181,19 +181,24 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
   return Array.from(out.values()).sort((a, b) => a.rank - b.rank);
 }
 
-async function firecrawlHtml(apiKey: string, url: string, waitFor = 3500): Promise<string> {
-  const r = await fetch("https://api.firecrawl.dev/v2/scrape", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ url, formats: ["html"], onlyMainContent: false, waitFor, timeout: 45000 }),
-  });
-  if (!r.ok) {
-    const t = await r.text().catch(() => "");
-    throw new Error(`Firecrawl ${r.status}: ${t.slice(0, 200)}`);
-  }
-  const j: any = await r.json();
-  const p = j?.data ?? j;
-  return typeof p?.html === "string" ? p.html : "";
+async function firecrawlHtml(apiKey: string, url: string, waitFor = 2500): Promise<string> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 22000);
+  try {
+    const r = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ url, formats: ["html"], onlyMainContent: false, waitFor, timeout: 20000 }),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) {
+      const t = await r.text().catch(() => "");
+      throw new Error(`Firecrawl ${r.status}: ${t.slice(0, 160)}`);
+    }
+    const j: any = await r.json();
+    const p = j?.data ?? j;
+    return typeof p?.html === "string" ? p.html : "";
+  } finally { clearTimeout(timer); }
 }
 
 // YouTube search sort tokens (`&sp=...`). Encoded values match the actual
