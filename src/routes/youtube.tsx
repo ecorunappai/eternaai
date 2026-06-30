@@ -277,10 +277,15 @@ function YouTubeDash() {
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
-                      <a href={m.source_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                      <a href={m.source_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline break-all">
                         <ExternalLink className="h-3 w-3" />{m.source_url}
                       </a>
-                      {m.notes && <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-2">{String(m.notes).replace(/KEYWORD:[^|]+\|\s*/, "")}</span></div>}
+                      {profileUrl && (
+                        <a href={profileUrl} target="_blank" rel="noopener noreferrer" className="mt-1 ml-3 inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-primary hover:underline">
+                          <AtSign className="h-3 w-3" /> Profile · {profileUrl.replace(/^https?:\/\//, "")}
+                        </a>
+                      )}
+                      {m.notes && <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-2">{String(m.notes).replace(/(KEYWORD|PLATFORM|PROFILE|SOURCE):[^|]*\|\s*/g, "")}</span></div>}
                       <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                         <Score label="Face / Visual" v={m.clip_score} />
                         <Score label="AI Verify" v={m.ai_score} />
