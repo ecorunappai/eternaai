@@ -160,3 +160,115 @@ export const captureEvidenceAgent = createServerFn({ method: "POST" })
     }
     return res;
   });
+
+// ====================================================================
+// Task-based operator (queue, live session, approval gates)
+// ====================================================================
+
+const TASK_TYPES = [
+  "youtube.investigate",
+  "instagram.investigate",
+  "contact.discover",
+  "email.prepare",
+  "takedown.prepare",
+] as const;
+
+async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
+  { offline: true; reason: string } | { offline: false; data: T }
+> {
+  const { baseUrl, token, configured } = agentConfig();
+  if (!configured) return { offline: true, reason: "BROWSER_AGENT_URL not configured" };
+  try {
+    const res = await fetch(`${baseUrl!.replace(/\/$/, "")}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init.headers ?? {}),
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) return { offline: true, reason: `Agent HTTP ${res.status}` };
+    return { offline: false, data: (await res.json()) as T };
+  } catch (e) {
+    return { offline: true, reason: (e as Error).message };
+  }
+}
+
+async function persistTask(supabase: any, userId: string, task: any) {
+  if (!task) return;
+  await supabase.from("agent_tasks").upsert({
+    id: undefined, // let Postgres generate the row PK; we key off worker id
+    user_id: userId,
+    case_id: task.caseId ?? null,
+    worker_task_id: task.id,
+    type: task.type,
+    status: task.status,
+    input: task.input ?? {},
+    steps: task.steps ?? [],
+    extracted: task.extracted ?? {},
+    screenshots: task.screenshots ?? [],
+    next_action: task.nextAction ?? null,
+    error: task.error ?? null,
+  }, { onConflict: "worker_task_id" });
+}
+
+export const enqueueAgentTask = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    type: z.enum(TASK_TYPES),
+    input: z.record(z.any()).default({}),
+    caseId: z.string().uuid().optional(),
+  }).parse(d))
+  .handler(async ({ data, context }) => {
+    const res = await rawAgent<{ task: any }>("/tasks", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    if (res.offline) return res;
+    await persistTask(context.supabase, context.userId, res.data.task);
+    return { offline: false as const, task: res.data.task };
+  });
+
+export const getAgentTask = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ workerTaskId: z.string() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const res = await rawAgent<{ task: any }>(`/tasks/${encodeURIComponent(data.workerTaskId)}`, { method: "GET" });
+    if (res.offline) {
+      // Fall back to the persisted row so UI keeps working when worker is down.
+      const { data: row } = await context.supabase.from("agent_tasks")
+        .select("*").eq("worker_task_id", data.workerTaskId).eq("user_id", context.userId).maybeSingle();
+      return { offline: true as const, reason: res.reason, task: row };
+    }
+    await persistTask(context.supabase, context.userId, res.data.task);
+    return { offline: false as const, task: res.data.task };
+  });
+
+export const listAgentTasks = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data } = await context.supabase.from("agent_tasks")
+      .select("*").eq("user_id", context.userId).order("created_at", { ascending: false }).limit(100);
+    return { tasks: data ?? [] };
+  });
+
+export const approveAgentTask = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ workerTaskId: z.string() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const res = await rawAgent<{ task: any }>(`/tasks/${encodeURIComponent(data.workerTaskId)}/approve`, { method: "POST" });
+    if (res.offline) return res;
+    await persistTask(context.supabase, context.userId, res.data.task);
+    return { offline: false as const, task: res.data.task };
+  });
+
+export const cancelAgentTask = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ workerTaskId: z.string() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const res = await rawAgent<{ task: any }>(`/tasks/${encodeURIComponent(data.workerTaskId)}/cancel`, { method: "POST" });
+    if (res.offline) return res;
+    await persistTask(context.supabase, context.userId, res.data.task);
+    return { offline: false as const, task: res.data.task };
+  });
