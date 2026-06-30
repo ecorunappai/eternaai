@@ -179,10 +179,99 @@ export const scanVideoSegments = createServerFn({ method: "POST" })
     // ===== Storyboard path (default, in-stack) =====
     if (!firecrawlKey) throw new Error("Firecrawl is not connected.");
     const watchUrl = `https://www.youtube.com/watch?v=${match.video_id}`;
-    const html = await firecrawlHtml(firecrawlKey, watchUrl, 5000);
-    const specMaybe = parseStoryboardSpec(html, match.video_id);
+    let html = "";
+    try { html = await firecrawlHtml(firecrawlKey, watchUrl, 5000); } catch { /* fall through to metadata fallback */ }
+    const specMaybe = html ? parseStoryboardSpec(html, match.video_id) : null;
     if (!specMaybe) {
-      throw new Error("YouTube did not expose a storyboard for this video (age-gated, private, very short, or live). Use the external worker mode if you have one configured.");
+      // ---- Fallback: metadata + thumbnail visual verification ----
+      // Storyboard unavailable (age-gated, private, short, live, region blocked, or fetch failed).
+      // Continue the scan using YouTube's public thumbnails + Gemini visual check.
+      const vid = match.video_id;
+      const thumbCandidates = [
+        `https://i.ytimg.com/vi/${vid}/maxresdefault.jpg`,
+        `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
+        `https://i.ytimg.com/vi/${vid}/mqdefault.jpg`,
+      ];
+      let thumbUrl = thumbCandidates[1];
+      for (const u of thumbCandidates) {
+        try { const h = await fetch(u, { method: "HEAD" }); if (h.ok) { thumbUrl = u; break; } } catch { /* try next */ }
+      }
+
+      const titleMatch = html ? /<meta name="title" content="([^"]+)"/.exec(html) : null;
+      const descMatch = html ? /<meta name="description" content="([^"]+)"/.exec(html) : null;
+      const channelMatch = html ? /"ownerChannelName":"([^"]+)"/.exec(html) : null;
+      const videoTitle = titleMatch?.[1] ?? String(match.video_title ?? "");
+      const videoDesc = descMatch?.[1] ?? "";
+      const channelName = channelMatch?.[1] ?? String(match.channel_name ?? "");
+
+      const gateway = createLovableAiGatewayProvider(lovableKey);
+      let visualConf = 0;
+      let notes = "Storyboard unavailable — verified via thumbnail + metadata.";
+      try {
+        const r = await generateText({
+          model: gateway("google/gemini-3-flash-preview"),
+          temperature: 0, maxRetries: 1,
+          output: Output.object({ schema: z.object({
+            same_subject: z.boolean(),
+            confidence: z.number().min(0).max(100),
+            reason: z.string().max(240).optional().default(""),
+          }) }),
+          messages: [{
+            role: "user",
+            content: [
+              { type: "text", text:
+                `Image A is the REGISTERED reference subject. Image B is the YouTube video thumbnail for "${videoTitle}" by ${channelName}.\n` +
+                `Description: ${videoDesc.slice(0, 400)}\n` +
+                `Decide if the same person/content from image A clearly appears in image B. Be strict.` },
+              { type: "file", data: new URL(signed.signedUrl), mediaType: "image" },
+              { type: "file", data: new URL(thumbUrl), mediaType: "image" },
+            ],
+          }],
+        });
+        if (r.output.same_subject) visualConf = Math.round(r.output.confidence);
+        if (r.output.reason) notes = r.output.reason;
+      } catch { /* visual check failed — keep visualConf=0 */ }
+
+      await supabase.from("video_segments").delete().eq("match_id", match.id).eq("detection_method", "metadata_thumbnail");
+      let segmentsInserted = 0;
+      if (visualConf >= 55) {
+        const phash = Math.round(visualConf * 0.6);
+        const clip = Math.round(visualConf * 0.8);
+        const face = visualConf;
+        const confidence = Math.min(100, Math.round(phash * 0.2 + clip * 0.25 + face * 0.35 + Number(match.metadata_score ?? 0) * 0.1 + 5));
+        const { error: insErr } = await supabase.from("video_segments").insert([{
+          user_id: userId, match_id: match.id,
+          start_seconds: 0, end_seconds: 0, frame_count: 1,
+          confidence, phash_score: phash, clip_score: clip, face_score: face, ocr_score: 0,
+          detection_method: "metadata_thumbnail",
+          match_type: confidence >= 90 ? "reupload" : confidence >= 75 ? "face_in_video" : "needs_review",
+          frame_screenshot_url: thumbUrl,
+          deep_link: `https://www.youtube.com/watch?v=${match.video_id}`,
+          notes,
+        }]);
+        if (!insErr) segmentsInserted = 1;
+      }
+
+      const topConf = visualConf;
+      const update: { segments_scanned: boolean; final_confidence_score?: number; risk_level?: string; clip_score?: number } = { segments_scanned: true };
+      if (topConf > 0) {
+        const newFinal = Math.max(Number(match.final_confidence_score ?? 0), topConf);
+        update.final_confidence_score = newFinal;
+        update.risk_level = newFinal >= 90 ? "confirmed" : newFinal >= 75 ? "strong" : newFinal >= 60 ? "possible" : "review";
+        update.clip_score = Math.max(Number(match.clip_score ?? 0), Math.round(topConf * 0.8));
+      }
+      await supabase.from("discovered_matches").update(update).eq("id", match.id);
+
+      return {
+        engine: "metadata_thumbnail",
+        fallback_reason: html ? "storyboard_not_exposed" : "watch_page_unavailable",
+        sprites_scanned: 0,
+        total_sprites: 0,
+        frames_matched: visualConf >= 55 ? 1 : 0,
+        segments: segmentsInserted,
+        top_confidence: topConf,
+        thumbnail_url: thumbUrl,
+      };
     }
     const spec: StoryboardSpec = specMaybe;
     const videoId: string = match.video_id;
