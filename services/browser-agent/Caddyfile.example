@@ -1,0 +1,35 @@
+# Eterna AI Browser Agent — Caddy reverse proxy
+# Copy to `Caddyfile` and replace the hostname. Caddy auto-provisions Let's Encrypt certs.
+
+browser-agent.yourdomain.com {
+    encode zstd gzip
+
+    # Health endpoint stays public (liveness probes); everything else needs bearer.
+    @health path /health
+    handle @health {
+        reverse_proxy browser-agent:8090
+    }
+
+    # Long-running task endpoints — generous timeouts for Playwright runs.
+    handle {
+        reverse_proxy browser-agent:8090 {
+            transport http {
+                read_timeout  120s
+                write_timeout 120s
+            }
+        }
+    }
+
+    # Basic hardening
+    header {
+        Strict-Transport-Security "max-age=31536000;"
+        X-Content-Type-Options    "nosniff"
+        Referrer-Policy           "no-referrer"
+        -Server
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}
