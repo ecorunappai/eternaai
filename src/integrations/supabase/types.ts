@@ -709,6 +709,77 @@ export type Database = {
         }
         Relationships: []
       }
+      scan_jobs: {
+        Row: {
+          asset_id: string | null
+          candidates_found: number
+          completed_at: string | null
+          created_at: string
+          current_pass: string | null
+          duplicates_skipped: number
+          error_message: string | null
+          id: string
+          kind: string
+          new_count: number
+          passes_done: number
+          progress: number
+          query: string | null
+          started_at: string
+          status: string
+          total_passes: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asset_id?: string | null
+          candidates_found?: number
+          completed_at?: string | null
+          created_at?: string
+          current_pass?: string | null
+          duplicates_skipped?: number
+          error_message?: string | null
+          id?: string
+          kind?: string
+          new_count?: number
+          passes_done?: number
+          progress?: number
+          query?: string | null
+          started_at?: string
+          status?: string
+          total_passes?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asset_id?: string | null
+          candidates_found?: number
+          completed_at?: string | null
+          created_at?: string
+          current_pass?: string | null
+          duplicates_skipped?: number
+          error_message?: string | null
+          id?: string
+          kind?: string
+          new_count?: number
+          passes_done?: number
+          progress?: number
+          query?: string | null
+          started_at?: string
+          status?: string
+          total_passes?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scan_jobs_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string

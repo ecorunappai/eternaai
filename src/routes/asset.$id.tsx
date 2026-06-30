@@ -37,6 +37,8 @@ function AssetPage() {
   const [official, setOfficial] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [cases, setCases] = useState<any[]>([]);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [liveJob, setLiveJob] = useState<any>(null);
   const [tab, setTab] = useState<string>("overview");
   const [scanning, setScanning] = useState(false);
   const scanFn = useServerFn(runYouTubeScan);
@@ -49,7 +51,7 @@ function AssetPage() {
       const { data: signed } = await supabase.storage.from("assets").createSignedUrl(a.storage_path, 3600);
       setThumb(signed?.signedUrl ?? null);
     }
-    const [p, c, m, v, o, ct, cs] = await Promise.all([
+    const [p, c, m, v, o, ct, cs, sj] = await Promise.all([
       supabase.from("monitoring_profiles").select("*").eq("asset_id", id).maybeSingle(),
       supabase.from("certificates").select("*").eq("asset_id", id).order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("discovered_matches").select("*").eq("asset_id", id).order("created_at", { ascending: false }).limit(500),
@@ -57,11 +59,30 @@ function AssetPage() {
       supabase.from("owned_accounts").select("*").order("created_at", { ascending: false }),
       supabase.from("creator_contacts").select("*").order("created_at", { ascending: false }).limit(100),
       supabase.from("enforcement_cases").select("*").order("created_at", { ascending: false }).limit(100),
+      supabase.from("scan_jobs").select("*").eq("asset_id", id).order("started_at", { ascending: false }).limit(25),
     ]);
     setProfile(p.data); setCert(c.data); setMatches(m.data ?? []); setViolations(v.data ?? []);
     setOfficial(o.data ?? []); setContacts(ct.data ?? []); setCases(cs.data ?? []);
+    setJobs(sj.data ?? []);
+    const running = (sj.data ?? []).find((j: any) => j.status === "running");
+    setLiveJob(running ?? null);
   }
   useEffect(() => { if (user && id) load(); }, [user, id]);
+
+  // Poll active scan job
+  useEffect(() => {
+    if (!liveJob?.id) return;
+    if (liveJob.status !== "running") return;
+    const t = setInterval(async () => {
+      const { data } = await supabase.from("scan_jobs").select("*").eq("id", liveJob.id).maybeSingle();
+      if (data) {
+        setLiveJob(data);
+        setJobs((arr) => arr.map((j) => j.id === data.id ? data : j));
+        if (data.status !== "running") clearInterval(t);
+      }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [liveJob?.id, liveJob?.status]);
 
   const youtubeMatches = useMemo(() => matches.filter(m => m.discovered_via === "youtube_firecrawl_ai_verified"), [matches]);
   const officialMatches = useMemo(() => youtubeMatches.filter(m => m.is_owned || m.result_category === "official"), [youtubeMatches]);
@@ -69,12 +90,22 @@ function AssetPage() {
   async function rescan() {
     if (!profile?.creator_name) return toast.error("Set up a monitoring profile first.");
     setScanning(true);
+    setLiveJob({ id: null, status: "running", progress: 0, passes_done: 0, total_passes: 0, current_pass: "starting", candidates_found: 0, started_at: new Date().toISOString() });
+    // Resolve real job row after server creates it
+    const poller = setInterval(async () => {
+      const { data } = await supabase.from("scan_jobs").select("*").eq("asset_id", id).order("started_at", { ascending: false }).limit(1).maybeSingle();
+      if (data && data.status === "running") { setLiveJob(data); clearInterval(poller); }
+    }, 800);
     try {
       const r: any = await scanFn({ data: { assetId: id, query: profile.creator_name } });
-      await supabase.from("monitoring_profiles").update({ last_scan_at: new Date().toISOString() }).eq("id", profile.id);
+      clearInterval(poller);
       toast.success(`+${r.new_count ?? r.inserted ?? 0} new · total ${r.total ?? 0}`);
       load();
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) {
+      clearInterval(poller);
+      setLiveJob((j: any) => j ? { ...j, status: "failed", error_message: (e as Error).message } : null);
+      toast.error((e as Error).message);
+    }
     finally { setScanning(false); }
   }
 
@@ -124,7 +155,7 @@ function AssetPage() {
       </div>
 
       <div className="rounded-xl border border-border bg-card p-5">
-        {tab === "overview" && <Overview asset={asset} profile={profile} matches={youtubeMatches} violations={violations} />}
+        {tab === "overview" && <Overview asset={asset} profile={profile} matches={youtubeMatches} violations={violations} jobs={jobs} liveJob={liveJob} />}
         {tab === "certificate" && <CertView cert={cert} asset={asset} />}
         {tab === "monitoring" && <MonitoringView profile={profile} onEdit={() => nav({ to: "/registry" })} />}
         {tab === "youtube" && <MatchesList items={youtubeMatches} />}
@@ -141,16 +172,65 @@ function Stat({ label, value }: { label: string; value: any }) {
   return <div className="rounded-lg border border-border bg-background p-3"><div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div><div className="mt-1 text-lg font-semibold">{value}</div></div>;
 }
 
-function Overview({ asset, profile, matches, violations }: any) {
+function JobStatusDot({ status }: { status: string }) {
+  const color = status === "running" ? "bg-primary animate-pulse" : status === "failed" ? "bg-destructive" : status === "completed_empty" ? "bg-amber-500" : "bg-emerald-500";
+  return <span className={`inline-block h-2 w-2 rounded-full ${color}`} />;
+}
+
+function Overview({ asset, profile, matches, violations, jobs, liveJob }: any) {
+  const lastJob = liveJob ?? jobs?.[0];
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="YouTube Matches" value={matches.length} />
         <Stat label="Suspected Violations" value={violations.length} />
-        <Stat label="SHA-256" value={<span className="font-mono text-xs">{asset.sha256?.slice(0, 12)}…</span>} />
+        <Stat label="Last Scan" value={lastJob?.completed_at ? new Date(lastJob.completed_at).toLocaleString() : lastJob?.started_at ? new Date(lastJob.started_at).toLocaleString() : "Never"} />
         <Stat label="Monitoring" value={profile ? "Active" : "Not set"} />
       </div>
       {!profile && <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">No monitoring profile yet. Open Registry → Protect to set up automatic discovery.</div>}
+
+      {liveJob && liveJob.status === "running" && (
+        <div className="rounded-lg border border-border bg-background p-3">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+              <span className="font-semibold">Scanning…</span>
+              <span className="text-muted-foreground">pass: {liveJob.current_pass ?? "—"}</span>
+              <span className="text-muted-foreground">· {liveJob.passes_done ?? 0}/{liveJob.total_passes ?? 0}</span>
+              <span className="text-muted-foreground">· {liveJob.candidates_found ?? 0} candidates</span>
+            </div>
+            <span className="text-muted-foreground">{liveJob.progress ?? 0}%</span>
+          </div>
+          <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+            <div className="h-full transition-all" style={{ width: `${liveJob.progress ?? 0}%`, background: "var(--gradient-violet)" }} />
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Scan History</div>
+        {(!jobs || jobs.length === 0) ? <Empty msg="No scans yet. Click Run Scan Now to start." /> : (
+          <ol className="relative border-l border-border ml-2 space-y-3">
+            {jobs.map((j: any) => (
+              <li key={j.id} className="ml-4">
+                <div className="absolute -left-[5px] mt-1.5"><JobStatusDot status={j.status} /></div>
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold capitalize">{String(j.status).replace(/_/g, " ")}</span>
+                    <span className="text-muted-foreground">· {j.query}</span>
+                  </div>
+                  <span className="text-muted-foreground">{new Date(j.started_at).toLocaleString()}</span>
+                </div>
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                  +{j.new_count ?? 0} new · {j.candidates_found ?? 0} candidates · {j.duplicates_skipped ?? 0} duplicates · {j.passes_done ?? 0}/{j.total_passes ?? 0} passes
+                  {j.completed_at && <> · ran {Math.round((new Date(j.completed_at).getTime() - new Date(j.started_at).getTime()) / 1000)}s</>}
+                </div>
+                {j.error_message && <div className="mt-0.5 text-[11px] text-destructive">{j.error_message}</div>}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </div>
   );
 }
