@@ -242,29 +242,30 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       return typeof p?.html === "string" ? p.html : "";
     }
 
-    // Source 1: YouTube directly.
-    const sources = [
-      `https://www.youtube.com/results?search_query=${encodeURIComponent(subject)}`,
+    const queries = [subject, `${subject} reaction`, `${subject} troll`, `${subject} review`];
+    const sources: string[] = [];
+    for (const q of queries) {
+      sources.push(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
+    }
+    sources.push(
       `https://m.youtube.com/results?search_query=${encodeURIComponent(subject)}`,
-      // Source 3: Google site-restricted search — robust fallback when YouTube blocks Firecrawl.
       `https://www.google.com/search?q=${encodeURIComponent("site:youtube.com " + subject)}`,
       `https://duckduckgo.com/html/?q=${encodeURIComponent("site:youtube.com " + subject)}`,
-    ];
+    );
 
-    let candidates: Candidate[] = [];
+    const allCandidates = new Map<string, Candidate>();
     let lastErr = "";
     for (const url of sources) {
       try {
         const html = await firecrawlHtml(url, url.includes("youtube.com") ? 4500 : 2500);
         const found = collectYouTubeCandidates(html);
-        if (found.length > 0) {
-          candidates = found.slice(0, 10);
-          break;
-        }
+        for (const c of found) if (!allCandidates.has(c.videoId)) allCandidates.set(c.videoId, c);
+        if (allCandidates.size >= 20) break;
       } catch (e: any) {
         lastErr = e?.message || String(e);
       }
     }
+    const candidates: Candidate[] = Array.from(allCandidates.values()).slice(0, 18);
 
     if (candidates.length === 0) {
       return {
