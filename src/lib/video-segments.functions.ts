@@ -159,24 +159,27 @@ export const scanVideoSegments = createServerFn({ method: "POST" })
     if (!firecrawlKey) throw new Error("Firecrawl is not connected.");
     const watchUrl = `https://www.youtube.com/watch?v=${match.video_id}`;
     const html = await firecrawlHtml(firecrawlKey, watchUrl, 5000);
-    const spec = parseStoryboardSpec(html, match.video_id);
-    if (!spec) {
+    const specMaybe = parseStoryboardSpec(html, match.video_id);
+    if (!specMaybe) {
       throw new Error("YouTube did not expose a storyboard for this video (age-gated, private, very short, or live). Use the external worker mode if you have one configured.");
     }
+    const spec: StoryboardSpec = specMaybe;
+    const videoId: string = match.video_id;
+    const videoTitle = String(match.video_title ?? "");
+    const referenceUrl: string = signed.signedUrl;
 
     const cellsPerSprite = spec.cols * spec.rows;
     const spriteCount = Math.ceil(spec.totalTiles / cellsPerSprite);
-    // Pass 1: sample sprites at every Nth (fast scan). Pass 2 re-runs on hit regions.
-    const SPRITE_STEP_PASS1 = Math.max(1, Math.ceil(spriteCount / 8)); // up to ~8 AI calls per video
+    const SPRITE_STEP_PASS1 = Math.max(1, Math.ceil(spriteCount / 8));
     const passOneIndices: number[] = [];
     for (let i = 0; i < spriteCount; i += SPRITE_STEP_PASS1) passOneIndices.push(i);
-    if (!passOneIndices.includes(spriteCount - 1)) passOneIndices.push(spriteCount - 1);
+    if (spriteCount > 0 && !passOneIndices.includes(spriteCount - 1)) passOneIndices.push(spriteCount - 1);
 
     const gateway = createLovableAiGatewayProvider(lovableKey);
 
     type CellHit = { sprite: number; cell: number; tsSec: number; confidence: number; notes: string };
     async function scanSprite(spriteIndex: number): Promise<CellHit[]> {
-      const url = spriteUrl(match.video_id!, spec, spriteIndex);
+      const url = spriteUrl(videoId, spec, spriteIndex);
       const tilesInThisSprite = Math.min(cellsPerSprite, spec.totalTiles - spriteIndex * cellsPerSprite);
       try {
         const r = await generateText({
@@ -188,12 +191,12 @@ export const scanVideoSegments = createServerFn({ method: "POST" })
             content: [
               { type: "text", text:
                 `Image A is the REGISTERED reference (face / content owner).\n` +
-                `Image B is a storyboard sprite from YouTube video "${match.video_title}". ` +
+                `Image B is a storyboard sprite from YouTube video "${videoTitle}". ` +
                 `It is a ${spec.cols}x${spec.rows} grid read left-to-right, top-to-bottom. ` +
                 `Cell 0 is top-left. There are ${tilesInThisSprite} valid cells in this sprite (later cells may be blank/duplicate — ignore those).\n` +
                 `Return ONLY cells where the same person/content from image A clearly appears in the cell. ` +
                 `Confidence 0-100. If unsure, omit the cell. Be strict — avoid false positives.` },
-              { type: "file", data: new URL(signed.signedUrl), mediaType: "image" },
+              { type: "file", data: new URL(referenceUrl), mediaType: "image" },
               { type: "file", data: new URL(url), mediaType: "image" },
             ],
           }],
