@@ -62,7 +62,7 @@ export const runMatchingScan = createServerFn({ method: "POST" })
         bucket < 0.55 ? 4 + Math.floor(Math.random() * 6) :  // 4–9 → strong
         bucket < 0.85 ? 10 + Math.floor(Math.random() * 8) : // 10–17 → possible
         18 + Math.floor(Math.random() * 14);                 // 18–31 → review
-      const dPhash = flipHashBits(asset.phash, flips);
+      const dPhash = flipHashBits(asset.phash as string, flips);
       const dDhash = asset.dhash ? flipHashBits(asset.dhash, Math.max(0, flips - 2)) : null;
       const clipSim = Math.max(0, 1 - flips / 48 + (Math.random() - 0.5) * 0.1);
       const metaSim = Math.random() * 0.6;
@@ -105,17 +105,18 @@ export const createViolationFromMatch = createServerFn({ method: "POST" })
     const { data: m, error } = await supabase.from("discovered_matches").select("*").eq("id", data.matchId).maybeSingle();
     if (error || !m) throw new Error("Match not found");
     if (m.user_id !== userId) throw new Error("Forbidden");
-    if (m.final_confidence_score < 60) throw new Error("Confidence too low for enforcement");
+    const score = Number(m.final_confidence_score ?? 0);
+    if (score < 60) throw new Error("Confidence too low for enforcement");
 
-    const threat = m.final_confidence_score >= 90 ? "critical" : m.final_confidence_score >= 75 ? "high" : "medium";
+    const threat = score >= 90 ? "critical" : score >= 75 ? "high" : "medium";
     const { error: vErr, data: v } = await supabase.from("violations").insert({
       user_id: userId,
       asset_id: m.asset_id,
       match_id: m.id,
       platform: m.platform,
-      infringing_url: m.source_url,
-      similarity_score: m.final_confidence_score,
-      confidence_score: m.final_confidence_score,
+      infringing_url: m.source_url ?? "",
+      similarity_score: score,
+      confidence_score: score,
       threat_level: threat,
       violation_type: m.match_type,
       status: "open",
