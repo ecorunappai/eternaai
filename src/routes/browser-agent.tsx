@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bot, Loader2, ExternalLink, Mail, ShieldAlert, Eye, Send, Scale, FileText, Camera, Search, AlertTriangle, CheckCircle2, Edit3 } from "lucide-react";
+import { Bot, Loader2, ExternalLink, Mail, ShieldAlert, Eye, Send, Scale, FileText, Camera, Search, AlertTriangle, CheckCircle2, Edit3, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
