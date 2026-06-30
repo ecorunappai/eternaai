@@ -40,15 +40,36 @@ async function callAgent<T>(path: string, body: unknown): Promise<
 export const browserAgentStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async () => {
-    const { baseUrl, configured } = agentConfig();
-    if (!configured) return { online: false, configured: false, reason: "Not configured" };
+    const { baseUrl, token, configured } = agentConfig();
+    if (!configured) {
+      return { online: false, configured: false, code: "not_configured" as const, reason: "BROWSER_AGENT_URL is not set" };
+    }
+    if (!token) {
+      return { online: false, configured: true, code: "token_missing" as const, reason: "BROWSER_AGENT_TOKEN is not set" };
+    }
     try {
+      const t0 = Date.now();
       const res = await fetch(`${baseUrl!.replace(/\/$/, "")}/health`, {
+        headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(5000),
       });
-      return { online: res.ok, configured: true, reason: res.ok ? "ok" : `HTTP ${res.status}` };
+      const latencyMs = Date.now() - t0;
+      if (res.ok) {
+        let body: any = {};
+        try { body = await res.json(); } catch {}
+        return { online: true, configured: true, code: "ok" as const, reason: "ok", latencyMs, service: body?.service ?? null };
+      }
+      if (res.status === 401 || res.status === 403) {
+        return { online: false, configured: true, code: "unauthorized" as const, reason: `Bearer token rejected (HTTP ${res.status})`, latencyMs };
+      }
+      if (res.status >= 500) {
+        return { online: false, configured: true, code: "launch_failed" as const, reason: `Agent returned HTTP ${res.status} — Playwright may have failed to start`, latencyMs };
+      }
+      return { online: false, configured: true, code: "http_error" as const, reason: `HTTP ${res.status}`, latencyMs };
     } catch (e) {
-      return { online: false, configured: true, reason: (e as Error).message };
+      const msg = (e as Error).message || "network error";
+      const code = /timeout|aborted/i.test(msg) ? ("timeout" as const) : ("unreachable" as const);
+      return { online: false, configured: true, code, reason: msg };
     }
   });
 
