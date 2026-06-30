@@ -25,6 +25,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
+import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiPublicYoutubeOauthCallbackRouteImport } from './routes/api/public/youtube-oauth-callback'
 
@@ -108,6 +109,11 @@ const VerifyCertIdRoute = VerifyCertIdRouteImport.update({
   path: '/verify/$certId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiSearchRoute = ApiSearchRouteImport.update({
+  id: '/api/search',
+  path: '/api/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
@@ -137,6 +143,7 @@ export interface FileRoutesByFullPath {
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
@@ -157,6 +164,7 @@ export interface FileRoutesByTo {
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
@@ -178,6 +186,7 @@ export interface FileRoutesById {
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
+  '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
@@ -200,6 +209,7 @@ export interface FileRouteTypes {
     | '/violations'
     | '/youtube'
     | '/api/chat'
+    | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
   fileRoutesByTo: FileRoutesByTo
@@ -220,6 +230,7 @@ export interface FileRouteTypes {
     | '/violations'
     | '/youtube'
     | '/api/chat'
+    | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
   id:
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | '/violations'
     | '/youtube'
     | '/api/chat'
+    | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
   fileRoutesById: FileRoutesById
@@ -261,6 +273,7 @@ export interface RootRouteChildren {
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
   ApiChatRoute: typeof ApiChatRoute
+  ApiSearchRoute: typeof ApiSearchRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
   ApiPublicYoutubeOauthCallbackRoute: typeof ApiPublicYoutubeOauthCallbackRoute
 }
@@ -379,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyCertIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/search': {
+      id: '/api/search'
+      path: '/api/search'
+      fullPath: '/api/search'
+      preLoaderRoute: typeof ApiSearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/chat': {
       id: '/api/chat'
       path: '/api/chat'
@@ -413,6 +433,7 @@ const rootRouteChildren: RootRouteChildren = {
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
   ApiChatRoute: ApiChatRoute,
+  ApiSearchRoute: ApiSearchRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
   ApiPublicYoutubeOauthCallbackRoute: ApiPublicYoutubeOauthCallbackRoute,
 }

@@ -58,6 +58,7 @@ function YouTubeDash() {
   const [selectedAsset, setSelectedAsset] = useState<string>("");
   const [query, setQuery] = useState<string>("");
   const [filter, setFilter] = useState<string>("all");
+  const [platformFilter, setPlatformFilter] = useState<string>("All");
   const [scanning, setScanning] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [gatheringId, setGatheringId] = useState<string | null>(null);
@@ -74,7 +75,7 @@ function YouTubeDash() {
     const [a, m] = await Promise.all([
       supabase.from("assets").select("id,title,asset_type,storage_path").eq("asset_type", "image").order("created_at", { ascending: false }),
       supabase.from("discovered_matches").select("*")
-        .in("discovered_via", ["youtube_firecrawl_ai_verified", "multi_platform_firecrawl"])
+        .in("discovered_via", ["youtube_firecrawl_ai_verified", "multi_platform_firecrawl", "multi_platform_searxng"])
         .order("created_at", { ascending: false }),
     ]);
     const list = a.data ?? [];
@@ -98,7 +99,9 @@ function YouTubeDash() {
     if (tb !== ta) return tb - ta;
     return Number(b.final_confidence_score ?? 0) - Number(a.final_confidence_score ?? 0);
   });
-  const visible = sorted.filter((m) => filter === "all" || m.asset_id === filter);
+  const visible = sorted
+    .filter((m) => filter === "all" || m.asset_id === filter)
+    .filter((m) => platformFilter === "All" || (m.platform ?? "Website") === platformFilter);
 
   // Per-platform counters across visible results.
   const counters: Record<string, number> = {};
@@ -212,6 +215,20 @@ function YouTubeDash() {
         })}
       </div>
 
+      {/* Platform filter chips */}
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
+        {(["All", "YouTube", "Instagram", "Facebook", "TikTok", "X", "Reddit", "News", "Website", "Blog"] as const).map((p) => {
+          const count = p === "All" ? sorted.length : sorted.filter((m) => (m.platform ?? "Website") === p).length;
+          const active = platformFilter === p;
+          return (
+            <button key={p} onClick={() => setPlatformFilter(p)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-card text-foreground border-border hover:bg-accent"}`}>
+              {p} <span className={`rounded-full px-1.5 text-[10px] ${active ? "bg-primary-foreground/20" : "bg-muted"}`}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm font-semibold">Suspected Matches · sorted newest first</div>
         <select value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-card px-3 text-sm">
@@ -219,6 +236,7 @@ function YouTubeDash() {
           {assets.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
         </select>
       </div>
+
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         {visible.length === 0 ? (
@@ -273,7 +291,10 @@ function YouTubeDash() {
                         {Number(m.ai_score ?? 0) === 0 && (
                           <span className="rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold">Needs Visual Review</span>
                         )}
-                        <span className="ml-auto text-xs text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                        {m.discovered_via === "multi_platform_searxng" && (
+                          <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"><Search className="h-3 w-3" />Source: SearXNG</span>
+                        )}
+                        <span className={`${m.discovered_via === "multi_platform_searxng" ? "" : "ml-auto"} text-xs text-muted-foreground`}>{new Date(m.created_at).toLocaleDateString()}</span>
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
