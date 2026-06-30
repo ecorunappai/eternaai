@@ -19,6 +19,13 @@ export async function runYouTube(ctx: RunCtx, input: any) {
   let channelUrl: string | undefined = input.channelUrl;
 
   try {
+    // 0. Frame as soon as YouTube opens, so the live view paints immediately.
+    patchTask(taskId, { status: "navigating", nextAction: "Opening YouTube" });
+    await page.goto("https://www.youtube.com/", { waitUntil: "commit", timeout: NAV_TIMEOUT }).catch(() => {});
+    await page.waitForTimeout(1500);
+    const openShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "open_youtube");
+    appendStep(taskId, { phase: "navigating", url: page.url(), note: "Opened YouTube", screenshot: openShot });
+
     // 1. Search creator if no channelUrl given
     if (!channelUrl && input.query) {
       const q = encodeURIComponent(String(input.query));
