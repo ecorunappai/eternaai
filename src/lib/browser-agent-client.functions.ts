@@ -198,7 +198,6 @@ async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
 async function persistTask(supabase: any, userId: string, task: any) {
   if (!task) return;
   await supabase.from("agent_tasks").upsert({
-    id: undefined, // let Postgres generate the row PK; we key off worker id
     user_id: userId,
     case_id: task.caseId ?? null,
     worker_task_id: task.id,
@@ -210,7 +209,7 @@ async function persistTask(supabase: any, userId: string, task: any) {
     screenshots: task.screenshots ?? [],
     next_action: task.nextAction ?? null,
     error: task.error ?? null,
-  }, { onConflict: "worker_task_id" });
+  }, { onConflict: "user_id,worker_task_id" });
 }
 
 export const enqueueAgentTask = createServerFn({ method: "POST" })
