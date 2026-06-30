@@ -192,7 +192,7 @@ export const reviewTakedown = createServerFn({ method: "POST" })
     if (!t || t.user_id !== userId) throw new Error("Takedown not found");
 
     const patch: any = { updated_at: new Date().toISOString() };
-    if (data.formFields) patch.form_fields = { ...(t.form_fields ?? {}), ...data.formFields };
+    if (data.formFields) patch.form_fields = { ...((t.form_fields as Record<string, string>) ?? {}), ...data.formFields };
     if (data.description) patch.violation_description = data.description;
     if (data.legalDeclaration) patch.legal_declaration = data.legalDeclaration;
     if (data.notes) patch.notes = data.notes;
