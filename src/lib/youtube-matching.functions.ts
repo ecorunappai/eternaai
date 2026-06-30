@@ -270,6 +270,30 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     // Pass 9: mobile YouTube relevance — different layout often surfaces extras.
     plan.push({ url: mYtSearch(subject, ""), matchedKeyword: subject, pass: "myt" });
 
+    // ---------- Create scan job for real-time progress + history ----------
+    const { data: jobRow, error: jobErr } = await supabase
+      .from("scan_jobs")
+      .insert({
+        user_id: userId, asset_id: assetId, kind: "youtube", query: subject,
+        status: "running", total_passes: plan.length, passes_done: 0, progress: 0,
+        current_pass: "starting",
+      })
+      .select("id").single();
+    if (jobErr) throw jobErr;
+    const jobId = jobRow.id;
+    let lastProgressWrite = 0;
+    async function writeProgress(force = false) {
+      const now = Date.now();
+      if (!force && now - lastProgressWrite < 1500) return;
+      lastProgressWrite = now;
+      await supabase.from("scan_jobs").update({
+        passes_done: passesDone,
+        progress: Math.round((passesDone / Math.max(1, plan.length)) * 100),
+        current_pass: lastPass,
+        candidates_found: allCandidates.size,
+      }).eq("id", jobId);
+    }
+
     // ---------- Execute plan with bounded concurrency, no early break ----------
     const allCandidates = new Map<string, Candidate>();
     const errors: string[] = [];
@@ -278,6 +302,8 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     const HARD_CAP = 800; // ceiling on candidates per scan
     let rankCursor = 0;
     let planIdx = 0;
+    let passesDone = 0;
+    let lastPass = "starting";
 
     async function worker() {
       while (true) {
@@ -285,8 +311,9 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         if (i >= plan.length) return;
         if (allCandidates.size >= HARD_CAP) return;
         const task = plan[i];
+        lastPass = task.pass;
         try {
-          const html = await firecrawlHtml(fcKey, task.url, task.url.includes("youtube.com") ? 4500 : 2500);
+          const html = await firecrawlHtml(fcKey, task.url, task.url.includes("youtube.com") ? 3500 : 2000);
           const found = collectYouTubeCandidates(html, task.matchedKeyword, rankCursor);
           rankCursor += found.length;
           let added = 0;
@@ -297,23 +324,26 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
           passStats[task.pass] = (passStats[task.pass] ?? 0) + added;
         } catch (e: any) {
           errors.push(`${task.pass} [${task.matchedKeyword}]: ${e?.message || e}`);
+        } finally {
+          passesDone++;
+          writeProgress().catch(() => {});
         }
       }
     }
-    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
-    const candidates = Array.from(allCandidates.values());
-    if (candidates.length === 0) {
-      return {
-        inserted: 0, new_count: 0, total: 0, query: subject,
-        passes_run: plan.length, pass_stats: passStats,
-        note: `No YouTube results from ${plan.length} discovery passes for "${subject}". ${errors[0] ?? "YouTube/Google may be temporarily blocking the scrape."}`,
-      };
+    try {
+      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+    } catch (e: any) {
+      await supabase.from("scan_jobs").update({
+        status: "failed", error_message: String(e?.message ?? e),
+        completed_at: new Date().toISOString(), passes_done: passesDone,
+      }).eq("id", jobId);
+      throw e;
     }
 
+    const candidates = Array.from(allCandidates.values());
+
     // ---------- Incremental dedup against existing rows ----------
-    // Pull existing video IDs for this asset so we never reprocess duplicates
-    // and existing historical rows stay intact.
     const { data: existingRows } = await supabase
       .from("discovered_matches")
       .select("video_id")
@@ -324,7 +354,6 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
 
     const fresh = candidates.filter((c) => !existing.has(c.videoId));
 
-    // Score and prepare insert rows for NEW candidates only.
     const rows = fresh.map((c) => {
       const textSignal = textSignalScore(c.title, c.channel, subject);
       const subjectInTitle = c.title.toLowerCase().includes(subject.toLowerCase());
@@ -361,7 +390,6 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
 
     let insertedCount = 0;
     if (rows.length) {
-      // Chunk inserts so a single huge payload doesn't hit body limits.
       const CHUNK = 200;
       for (let i = 0; i < rows.length; i += CHUNK) {
         const slice = rows.slice(i, i + CHUNK);
@@ -372,7 +400,32 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       }
     }
 
+    await supabase.from("scan_jobs").update({
+      status: candidates.length === 0 ? "completed_empty" : "completed",
+      progress: 100, passes_done: plan.length,
+      current_pass: "done",
+      candidates_found: candidates.length,
+      new_count: insertedCount,
+      duplicates_skipped: candidates.length - fresh.length,
+      completed_at: new Date().toISOString(),
+      error_message: errors[0] ?? null,
+    }).eq("id", jobId);
+
+    // Update monitoring profile's last_scan_at
+    await supabase.from("monitoring_profiles")
+      .update({ last_scan_at: new Date().toISOString() })
+      .eq("asset_id", assetId);
+
+    if (candidates.length === 0) {
+      return {
+        job_id: jobId, inserted: 0, new_count: 0, total: 0, query: subject,
+        passes_run: plan.length, pass_stats: passStats,
+        note: `No YouTube results from ${plan.length} discovery passes for "${subject}". ${errors[0] ?? "YouTube/Google may be temporarily blocking the scrape."}`,
+      };
+    }
+
     return {
+      job_id: jobId,
       inserted: insertedCount,
       new_count: insertedCount,
       total: existing.size + insertedCount,
