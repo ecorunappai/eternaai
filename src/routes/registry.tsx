@@ -49,7 +49,7 @@ function Registry() {
         if (upErr) throw upErr;
         const type = detectType(file.type);
         let phash: string | null = null, dhash: string | null = null, ahash: string | null = null;
-        let image_metadata: Record<string, unknown> | null = null;
+        let image_metadata: Record<string, string | number> | null = null;
         let keyframes: Awaited<ReturnType<typeof extractVideoKeyframes>> | null = null;
         try {
           if (type === "image") {
