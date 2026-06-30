@@ -30,6 +30,7 @@ type Candidate = {
   publishedText?: string;
   recencyHours?: number;
   viewCount?: number;
+  discoveryWindow?: "today" | "week" | "month" | "historical";
 };
 
 const VerificationSchema = z.object({
@@ -129,7 +130,7 @@ function resultCategoryFromSignals(title: string, channel: string, _matchedKeywo
   if (/(deepfake|ai[- ]generated|fake video|fake celebrity|impersonat)/.test(t)) return "impersonation";
   if (/(reaction|reacts|reacting|റിയാക്ഷൻ)/.test(t)) return "reaction";
   if (/(troll|roast|meme|ട്രോൾ)/.test(t)) return "troll";
-  if (/\b(news|commentary|വാർത്ത|breaking|controversy|exposed|scandal|interview|podcast)\b/.test(t)) return "news";
+  if (/(\b(news|commentary|breaking|controversy|exposed|scandal|interview|podcast)\b|വാർത്ത|ന്യൂസ്|വിവാദം|പ്രശ്നം)/.test(t)) return "news";
   if (/(full video|reupload|repost|leaked|without permission)/.test(t)) return "reupload";
   if (/(fan ?page|fanclub|fans|tribute|status|ഫാൻസ്)/.test(t)) return "fan";
   return "needs_review";
@@ -139,7 +140,10 @@ function resultCategoryFromSignals(title: string, channel: string, _matchedKeywo
 // "1 month ago", "Streamed 5 days ago" into approximate hours-since-upload.
 function parsePublishedAgo(text: string | undefined): number | undefined {
   if (!text) return undefined;
-  const m = /(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*ago/i.exec(text);
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (/\b(just now|today|live now|premieres? now)\b/i.test(normalized)) return 1;
+  if (/\byesterday\b/i.test(normalized)) return 24;
+  const m = /(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*ago/i.exec(normalized);
   if (!m) return undefined;
   const n = parseInt(m[1], 10);
   const unit = m[2].toLowerCase();
@@ -159,8 +163,54 @@ function parseViewCount(text: string | undefined): number | undefined {
   return Math.round(n * mult);
 }
 
+function decodeEscapedJsonText(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  return decodeHtml(value.replace(/\\n/g, " ").replace(/\\"/g, '"')).trim();
+}
+
+function extractVideoId(url: string | undefined): { id: string; isShort: boolean } | null {
+  if (!url) return null;
+  const decoded = decodeURIComponent(url);
+  const patterns: Array<[RegExp, boolean]> = [
+    [/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/, false],
+    [/youtube\.com\/shorts\/([A-Za-z0-9_-]{11})/, true],
+    [/\/watch\?v=([A-Za-z0-9_-]{11})/, false],
+    [/\/shorts\/([A-Za-z0-9_-]{11})/, true],
+  ];
+  for (const [re, isShort] of patterns) {
+    const m = re.exec(decoded);
+    if (m?.[1]) return { id: m[1], isShort };
+  }
+  return null;
+}
+
+function recencyFromDiscoveryWindow(window: Candidate["discoveryWindow"]): number | undefined {
+  if (window === "today") return 12;
+  if (window === "week") return 24 * 3;
+  if (window === "month") return 24 * 14;
+  return undefined;
+}
+
+function mergeCandidate(current: Candidate, incoming: Candidate): Candidate {
+  return {
+    ...current,
+    title: current.title.startsWith("YouTube video ") || current.title.startsWith("YouTube Short ") ? incoming.title : current.title,
+    channel: current.channel === "YouTube" || current.channel === "Unknown channel" || current.channel === "YouTube Shorts" ? incoming.channel : current.channel,
+    publishedText: current.publishedText ?? incoming.publishedText,
+    recencyHours: current.recencyHours ?? incoming.recencyHours,
+    viewCount: current.viewCount ?? incoming.viewCount,
+    discoveryWindow: current.discoveryWindow ?? incoming.discoveryWindow,
+    matchedKeyword: current.matchedKeyword || incoming.matchedKeyword,
+  };
+}
+
 function collectYouTubeCandidates(html: string, matchedKeyword: string, startRank: number): Candidate[] {
   const out: Map<string, Candidate> = new Map();
+  const add = (c: Candidate) => {
+    const prev = out.get(c.videoId);
+    out.set(c.videoId, prev ? mergeCandidate(prev, c) : c);
+  };
+  const rendererRegex = /"videoRenderer":\{"videoId":"([A-Za-z0-9_-]{11})"/g;
   const videoRegex = /"videoId":"([A-Za-z0-9_-]{11})"[^]*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
   const ownerRegex = /"ownerText":\{"runs":\[\{"text":"([^"]+)"/;
   const longByline = /"longBylineText":\{"runs":\[\{"text":"([^"]+)"/;
@@ -172,6 +222,27 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
 
   let m: RegExpExecArray | null;
   let rank = startRank;
+  while ((m = rendererRegex.exec(html)) !== null) {
+    const id = m[1];
+    const tail = html.slice(m.index, m.index + 9000);
+    const title = decodeEscapedJsonText(
+      /"title":\{"runs":\[\{"text":"([^"]+)"/.exec(tail)?.[1]
+      ?? /"title":\{"simpleText":"([^"]+)"/.exec(tail)?.[1]
+      ?? /"accessibilityData":\{"label":"([^"]+)"/.exec(tail)?.[1]?.split(" by ")[0]
+    ) ?? `YouTube video ${id}`;
+    const channel = decodeEscapedJsonText(ownerRegex.exec(tail)?.[1] ?? longByline.exec(tail)?.[1]) ?? "Unknown channel";
+    const publishedText = decodeEscapedJsonText(publishedRegex.exec(tail)?.[1]);
+    const vcRaw = viewCountRegex.exec(tail);
+    const viewText = decodeEscapedJsonText(vcRaw?.[1] ?? vcRaw?.[2] ?? shortViewRegex.exec(tail)?.[1]);
+    add({
+      videoId: id, url: `https://www.youtube.com/watch?v=${id}`,
+      thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+      title, channel,
+      isShort: false, rank: rank++, matchedKeyword,
+      publishedText, recencyHours: parsePublishedAgo(publishedText),
+      viewCount: parseViewCount(viewText),
+    });
+  }
   while ((m = videoRegex.exec(html)) !== null) {
     const id = m[1];
     if (out.has(id)) continue;
@@ -180,7 +251,7 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
     const publishedText = publishedRegex.exec(tail)?.[1];
     const vcRaw = viewCountRegex.exec(tail);
     const viewText = vcRaw?.[1] ?? vcRaw?.[2] ?? shortViewRegex.exec(tail)?.[1];
-    out.set(id, {
+    add({
       videoId: id, url: `https://www.youtube.com/watch?v=${id}`,
       thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
       title: decodeHtml(m[2]), channel: decodeHtml(channel),
@@ -193,7 +264,7 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
     while ((m = re.exec(html)) !== null) {
       const id = m[1];
       if (out.has(id)) continue;
-      out.set(id, {
+      add({
         videoId: id, url: `https://www.youtube.com/shorts/${id}`,
         thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
         title: decodeHtml(m[2]), channel: "YouTube Shorts",
@@ -213,7 +284,7 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
       while ((m = re.exec(html)) !== null) {
         const id = m[1];
         if (out.has(id)) continue;
-        out.set(id, {
+        add({
           videoId: id,
           url: isShort ? `https://www.youtube.com/shorts/${id}` : `https://www.youtube.com/watch?v=${id}`,
           thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
@@ -222,6 +293,37 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
         });
       }
     }
+  }
+  return Array.from(out.values()).sort((a, b) => a.rank - b.rank);
+}
+
+function collectYouTubeCandidatesFromSearch(results: any[], matchedKeyword: string, startRank: number, discoveryWindow?: Candidate["discoveryWindow"]): Candidate[] {
+  const out = new Map<string, Candidate>();
+  let rank = startRank;
+  for (const r of results) {
+    const url = String(r?.url || r?.link || "");
+    const parsed = extractVideoId(url);
+    if (!parsed || out.has(parsed.id)) continue;
+    const title = decodeHtml(String(r?.title || r?.metadata?.title || `${parsed.isShort ? "YouTube Short" : "YouTube video"} ${parsed.id}`));
+    const description = decodeHtml(String(r?.description || r?.snippet || r?.metadata?.description || ""));
+    const text = `${title} ${description}`;
+    const publishedText = /(just now|today|yesterday|\d+\s*(?:second|minute|hour|day|week|month|year)s?\s*ago)/i.exec(text)?.[0]
+      ?? (discoveryWindow ? `within ${discoveryWindow}` : undefined);
+    const recencyHours = parsePublishedAgo(publishedText) ?? recencyFromDiscoveryWindow(discoveryWindow);
+    out.set(parsed.id, {
+      videoId: parsed.id,
+      url: parsed.isShort ? `https://www.youtube.com/shorts/${parsed.id}` : `https://www.youtube.com/watch?v=${parsed.id}`,
+      thumb: `https://i.ytimg.com/vi/${parsed.id}/hqdefault.jpg`,
+      title,
+      channel: String(r?.metadata?.siteName || r?.metadata?.author || "YouTube"),
+      isShort: parsed.isShort,
+      rank: rank++,
+      matchedKeyword,
+      publishedText,
+      recencyHours,
+      viewCount: parseViewCount(text),
+      discoveryWindow,
+    });
   }
   return Array.from(out.values()).sort((a, b) => a.rank - b.rank);
 }
@@ -264,8 +366,8 @@ function recencyLabel(hours: number | undefined): string {
 function contentTagsFor(title: string, channel: string, isShort: boolean): string[] {
   const t = `${title} ${channel}`.toLowerCase();
   const tags: string[] = [];
-  if (/(breaking|just in|live now)/.test(t)) tags.push("breaking_news");
-  if (/\b(news|വാർത്ത|report)\b/.test(t)) tags.push("news");
+  if (/(breaking|just in|live now|ബ്രേക്കിംഗ്)/.test(t)) tags.push("breaking_news");
+  if (/(\b(news|report|latest)\b|വാർത്ത|ന്യൂസ്|ഇന്ന്)/.test(t)) tags.push("news");
   if (/(reaction|reacts|reacting|റിയാക്ഷൻ)/.test(t)) tags.push("reaction");
   if (/(troll|roast|meme|ട്രോൾ)/.test(t)) tags.push("troll");
   if (/(expose|exposed|scandal|leaked)/.test(t)) tags.push("expose");
@@ -318,6 +420,26 @@ async function firecrawlHtml(apiKey: string, url: string, waitFor = 2500): Promi
   return "";
 }
 
+async function firecrawlSearchResults(apiKey: string, query: string, tbs?: string, limit = 25): Promise<any[]> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 18000);
+    const r = await fetch("https://api.firecrawl.dev/v2/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ query, limit, tbs, timeout: 16000 }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!r.ok) return [];
+    const j: any = await r.json();
+    const arr = j?.data?.web ?? j?.data ?? j?.web ?? [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
 // YouTube search sort tokens (`&sp=...`). Encoded values match the actual
 // filter chip URLs YouTube generates when you pick "Sort by".
 const SORT_MODES: Array<{ label: string; sp: string }> = [
@@ -335,7 +457,7 @@ const DATE_FILTERS: Array<{ label: string; sp: string }> = [
 const YEAR_SUFFIXES = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
 const GOOGLE_SUFFIXES = ["", "reaction", "troll", "issue", "controversy", "exposed", "scandal", "interview", "news", "podcast", "livestream"];
 // Recency intent keywords appended to date-filtered passes so the news/commentary tab refreshes.
-const RECENT_INTENT = ["", "news", "latest", "today", "controversy", "reaction", "troll", "interview", "viral"];
+const RECENT_INTENT = ["", "latest", "today", "news", "breaking news", "controversy", "issue", "reaction", "troll", "expose", "viral", "commentary", "Malayalam news", "Malayalam troll"];
 
 export const runYouTubeScan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -357,7 +479,7 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     const keywordQueries = expandQueries(subject);
 
     // ---------- Build the deep multi-pass URL plan ----------
-    type SourceTask = { url: string; matchedKeyword: string; pass: string };
+    type SourceTask = { url?: string; searchQuery?: string; tbs?: string; matchedKeyword: string; pass: string; discoveryWindow?: Candidate["discoveryWindow"] };
     const plan: SourceTask[] = [];
     const ytSearch = (q: string, sp: string) =>
       `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}${sp ? `&sp=${sp}` : ""}`;
@@ -365,6 +487,21 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       `https://m.youtube.com/results?search_query=${encodeURIComponent(q)}${sp ? `&sp=${sp}` : ""}`;
     const google = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}&num=50`;
     const ddg = (q: string) => `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+
+    // Priority live search passes. Firecrawl Search supports true time filters;
+    // these are inserted before scrape-based discovery so Today / This Month
+    // results are created with real recency metadata first.
+    const liveWindows: Array<{ label: "today" | "this_week" | "this_month"; tbs: string; window: Candidate["discoveryWindow"] }> = [
+      { label: "today", tbs: "qdr:d", window: "today" },
+      { label: "this_week", tbs: "qdr:w", window: "week" },
+      { label: "this_month", tbs: "qdr:m", window: "month" },
+    ];
+    for (const win of liveWindows) {
+      for (const intent of RECENT_INTENT.slice(0, 12)) {
+        const q = intent ? `${subject} ${intent} site:youtube.com` : `${subject} site:youtube.com`;
+        plan.push({ searchQuery: q, tbs: win.tbs, matchedKeyword: intent ? `${subject} ${intent}` : subject, pass: `firecrawl_${win.label}`, discoveryWindow: win.window });
+      }
+    }
 
     // Pass 1-3: per-keyword × relevance/date/views (covers latest + old + popular).
     const KEYWORD_CAP = 8;
@@ -379,7 +516,8 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     for (const df of DATE_FILTERS) {
       for (const intent of RECENT_INTENT) {
         const q = intent ? `${subject} ${intent}` : subject;
-        plan.unshift({ url: ytSearch(q, df.sp), matchedKeyword: q, pass: `yt_${df.label}` });
+        const discoveryWindow = df.label === "today" ? "today" : df.label === "this_week" ? "week" : "month";
+        plan.unshift({ url: ytSearch(q, df.sp), matchedKeyword: q, pass: `yt_${df.label}`, discoveryWindow });
       }
     }
     // Pass 4: shorts-only filter on the base subject + top intent keywords.
@@ -447,12 +585,16 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         const task = plan[i];
         lastPass = task.pass;
         try {
-          const html = await firecrawlHtml(fcKey, task.url, task.url.includes("youtube.com") ? 3500 : 2000);
-          const found = collectYouTubeCandidates(html, task.matchedKeyword, rankCursor);
+          const found = task.searchQuery
+            ? collectYouTubeCandidatesFromSearch(await firecrawlSearchResults(fcKey, task.searchQuery, task.tbs), task.matchedKeyword, rankCursor, task.discoveryWindow)
+            : collectYouTubeCandidates(await firecrawlHtml(fcKey, task.url!, task.url!.includes("youtube.com") ? 3500 : 2000), task.matchedKeyword, rankCursor)
+                .map((c) => ({ ...c, discoveryWindow: c.discoveryWindow ?? task.discoveryWindow, recencyHours: c.recencyHours ?? recencyFromDiscoveryWindow(task.discoveryWindow) }));
           rankCursor += found.length;
           let added = 0;
           for (const c of found) {
-            if (!allCandidates.has(c.videoId)) { allCandidates.set(c.videoId, c); added++; }
+            const prev = allCandidates.get(c.videoId);
+            if (prev) allCandidates.set(c.videoId, mergeCandidate(prev, c));
+            else { allCandidates.set(c.videoId, c); added++; }
             if (allCandidates.size >= HARD_CAP) break;
           }
           passStats[task.pass] = (passStats[task.pass] ?? 0) + added;
@@ -480,11 +622,45 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     // ---------- Incremental dedup against existing rows ----------
     const { data: existingRows } = await supabase
       .from("discovered_matches")
-      .select("video_id")
+      .select("id,video_id,published_at,recency_hours,view_count,video_title,channel_name,content_tags,trending_score")
       .eq("user_id", userId)
       .eq("asset_id", assetId)
       .eq("discovered_via", "youtube_firecrawl_ai_verified");
-    const existing = new Set((existingRows ?? []).map((r: any) => r.video_id).filter(Boolean));
+    const existingRowsByVideo = new Map((existingRows ?? []).filter((r: any) => r.video_id).map((r: any) => [r.video_id, r]));
+    const existing = new Set(existingRowsByVideo.keys());
+
+    // Rediscovered existing videos still need metadata repair. Older scans often
+    // inserted placeholder titles and no upload date, which made stale rows look
+    // like "today" because the UI could only show created_at. Patch those rows
+    // whenever a priority Today/Week/Month pass finds better recency data.
+    const metadataRepairs = candidates
+      .map((c) => {
+        const row: any = existingRowsByVideo.get(c.videoId);
+        if (!row) return null;
+        const tags = contentTagsFor(c.title, c.channel, c.isShort);
+        const trending = computeTrendingScore(c.recencyHours, c.viewCount);
+        const publishedAt = c.recencyHours != null
+          ? new Date(Date.now() - c.recencyHours * 3600 * 1000).toISOString()
+          : null;
+        const titleIsPlaceholder = !row.video_title || String(row.video_title).startsWith("YouTube video ") || String(row.video_title).startsWith("YouTube Short ");
+        const patch: Record<string, any> = {};
+        if (!row.published_at && publishedAt) patch.published_at = publishedAt;
+        if (row.recency_hours == null && c.recencyHours != null) patch.recency_hours = c.recencyHours;
+        if (row.view_count == null && c.viewCount != null) patch.view_count = c.viewCount;
+        if (titleIsPlaceholder && c.title && !c.title.startsWith("YouTube video ") && !c.title.startsWith("YouTube Short ")) patch.video_title = c.title;
+        if ((!row.channel_name || row.channel_name === "YouTube" || row.channel_name === "Unknown channel") && c.channel) patch.channel_name = c.channel;
+        if ((!Array.isArray(row.content_tags) || row.content_tags.length === 0) && tags.length) patch.content_tags = tags;
+        if (row.trending_score == null || Number(row.trending_score) < trending) patch.trending_score = trending;
+        if (Object.keys(patch).length === 0) return null;
+        patch.recency_label = recencyLabel(c.recencyHours);
+        patch.notes = `KEYWORD:${c.matchedKeyword} | TYPE:Metadata repaired | UPLOADED:${c.publishedText ?? c.discoveryWindow ?? "unknown"} | VIEWS:${c.viewCount ?? "?"} | TRENDING:${trending} | REDISCOVERED_PRIORITY_SCAN`;
+        return { id: row.id, patch };
+      })
+      .filter(Boolean) as Array<{ id: string; patch: Record<string, any> }>;
+
+    for (const repair of metadataRepairs.slice(0, 250)) {
+      await supabase.from("discovered_matches").update(repair.patch as any).eq("id", repair.id);
+    }
 
     const fresh = candidates.filter((c) => !existing.has(c.videoId));
 

@@ -28,10 +28,10 @@ const FAIR_USE_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 const TABS: Array<{ id: string; label: string }> = [
-  { id: "latest", label: "Latest (Newest First)" },
-  { id: "last_24h", label: "Last 24h" },
+  { id: "latest", label: "Priority Latest" },
+  { id: "last_24h", label: "Today / 24h" },
   { id: "last_7d", label: "Last 7 Days" },
-  { id: "last_30d", label: "Last 30 Days" },
+  { id: "last_30d", label: "This Month" },
   { id: "trending", label: "Trending Today" },
   { id: "news", label: "Latest News" },
   { id: "breaking_news", label: "Breaking News" },
@@ -118,14 +118,33 @@ function YouTubeDash() {
   const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }, []);
   const now = Date.now();
 
-  // Sort all matches newest-first using published_at when available, falling
-  // back to created_at. This is the canonical ordering for every tab so old
-  // videos never appear above fresh uploads.
+  function getPublishedMs(m: any): number {
+    if (m.published_at) return new Date(m.published_at).getTime();
+    const h = m.recency_hours != null ? Number(m.recency_hours) : null;
+    return h != null ? now - h * 3600_000 : 0;
+  }
+
+  function latestPriority(m: any): number {
+    const h = m.recency_hours != null ? Number(m.recency_hours) : (m.published_at ? (now - new Date(m.published_at).getTime()) / 3600_000 : null);
+    if (h != null && h <= 24) return 5;
+    if (h != null && h <= 24 * 7) return 4;
+    if (h != null && h <= 24 * 30) return 3;
+    if (h != null) return 2;
+    return 1;
+  }
+
+  // Sort all matches by real upload recency first. Unknown/stale rows are pushed
+  // below Today / Week / This Month, so newly discovered issues match YouTube's
+  // live results instead of old database insertion order.
   const matchesSorted = useMemo(() => {
     return [...matches].sort((a, b) => {
-      const ap = a.published_at ? new Date(a.published_at).getTime() : 0;
-      const bp = b.published_at ? new Date(b.published_at).getTime() : 0;
+      const freshDelta = latestPriority(b) - latestPriority(a);
+      if (freshDelta !== 0) return freshDelta;
+      const ap = getPublishedMs(a);
+      const bp = getPublishedMs(b);
       if (ap !== bp) return bp - ap;
+      const trendDelta = Number(b.trending_score ?? 0) - Number(a.trending_score ?? 0);
+      if (trendDelta !== 0) return trendDelta;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   }, [matches]);
@@ -137,7 +156,7 @@ function YouTubeDash() {
   }
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: matchesSorted.length, latest: matchesSorted.length };
+    const c: Record<string, number> = { all: matchesSorted.length, latest: 0 };
     let last24 = 0, last7 = 0, last30 = 0, trending = 0, historical = 0;
     for (const m of matchesSorted) {
       const h = hoursSinceUpload(m);
@@ -146,6 +165,7 @@ function YouTubeDash() {
         if (h <= 24 * 7) last7++;
         if (h <= 24 * 30) last30++;
       }
+      if (h == null || h <= 24 * 30) c.latest++;
       if (Number(m.trending_score ?? 0) >= 60) trending++;
       if (h == null || h > 24 * 90) historical++;
       if (m.is_owned || m.result_category === "official") c.official = (c.official ?? 0) + 1;
@@ -181,12 +201,19 @@ function YouTubeDash() {
   }, [matchesSorted, counts]);
 
   const visible = useMemo(() => {
-    let list = matchesSorted;
-    if (tab === "all" || tab === "latest") return list;
+    const seen = new Set<string>();
+    let list = matchesSorted.filter((m) => {
+      const key = String(m.video_id || m.source_url || m.id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    if (tab === "all") return list;
+    if (tab === "latest") return list.filter(m => { const h = hoursSinceUpload(m); return h == null || h <= 24 * 30; });
     if (tab === "last_24h") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24; });
     if (tab === "last_7d") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24 * 7; });
     if (tab === "last_30d") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24 * 30; });
-    if (tab === "trending") return [...list].sort((a, b) => Number(b.trending_score ?? 0) - Number(a.trending_score ?? 0)).filter(m => Number(m.trending_score ?? 0) >= 40);
+    if (tab === "trending") return [...list].sort((a, b) => Number(b.trending_score ?? 0) - Number(a.trending_score ?? 0)).filter(m => Number(m.trending_score ?? 0) >= 40 && (hoursSinceUpload(m) ?? 9999) <= 24 * 30);
     if (tab === "historical") return list.filter(m => { const h = hoursSinceUpload(m); return h == null || h > 24 * 90; });
     if (tab === "official") return list.filter(m => m.is_owned || m.result_category === "official");
     if (TAG_TABS.has(tab)) return list.filter(m => Array.isArray(m.content_tags) && m.content_tags.includes(tab) && !m.is_owned);
@@ -405,15 +432,15 @@ function YouTubeDash() {
         <div className="text-xs text-muted-foreground">
           Showing <span className="font-semibold text-foreground">{visible.length.toLocaleString()}</span> result{visible.length === 1 ? "" : "s"} in <span className="font-semibold text-foreground">{TABS.find(t => t.id === tab)?.label}</span>
         </div>
-        {tab === "news" && (
+        {(["latest", "last_24h", "last_7d", "last_30d", "trending", "news"].includes(tab)) && (
           <button
             onClick={onScan}
             disabled={scanning || !selectedAsset || !query.trim()}
             className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
-            title="Force a fresh YouTube fetch for news / commentary"
+            title="Force a fresh YouTube fetch for today, this week and this month"
           >
             {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Refresh results
+            Refresh latest
           </button>
         )}
       </div>
@@ -487,7 +514,7 @@ function YouTubeDash() {
                           {m.view_count != null && (
                             <span className="text-[10px] text-muted-foreground">{Number(m.view_count).toLocaleString()} views</span>
                           )}
-                          <span className="text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                          <span className="text-muted-foreground">{m.published_at ? "Uploaded" : "Discovered"} {new Date(m.published_at ?? m.created_at).toLocaleDateString()}</span>
                         </span>
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
