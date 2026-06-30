@@ -215,6 +215,20 @@ function YouTubeDash() {
         })}
       </div>
 
+      {/* Platform filter chips */}
+      <div className="mb-3 flex items-center gap-2 flex-wrap">
+        {(["All", "YouTube", "Instagram", "Facebook", "TikTok", "X", "Reddit", "News", "Website", "Blog"] as const).map((p) => {
+          const count = p === "All" ? sorted.length : sorted.filter((m) => (m.platform ?? "Website") === p).length;
+          const active = platformFilter === p;
+          return (
+            <button key={p} onClick={() => setPlatformFilter(p)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition ${active ? "bg-primary text-primary-foreground border-primary" : "bg-card text-foreground border-border hover:bg-accent"}`}>
+              {p} <span className={`rounded-full px-1.5 text-[10px] ${active ? "bg-primary-foreground/20" : "bg-muted"}`}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="text-sm font-semibold">Suspected Matches · sorted newest first</div>
         <select value={filter} onChange={(e) => setFilter(e.target.value)} className="h-9 rounded-lg border border-border bg-card px-3 text-sm">
@@ -222,6 +236,7 @@ function YouTubeDash() {
           {assets.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
         </select>
       </div>
+
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         {visible.length === 0 ? (
