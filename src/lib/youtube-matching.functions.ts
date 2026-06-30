@@ -242,29 +242,30 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       return typeof p?.html === "string" ? p.html : "";
     }
 
-    // Source 1: YouTube directly.
-    const sources = [
-      `https://www.youtube.com/results?search_query=${encodeURIComponent(subject)}`,
+    const queries = [subject, `${subject} reaction`, `${subject} troll`, `${subject} review`];
+    const sources: string[] = [];
+    for (const q of queries) {
+      sources.push(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`);
+    }
+    sources.push(
       `https://m.youtube.com/results?search_query=${encodeURIComponent(subject)}`,
-      // Source 3: Google site-restricted search — robust fallback when YouTube blocks Firecrawl.
       `https://www.google.com/search?q=${encodeURIComponent("site:youtube.com " + subject)}`,
       `https://duckduckgo.com/html/?q=${encodeURIComponent("site:youtube.com " + subject)}`,
-    ];
+    );
 
-    let candidates: Candidate[] = [];
+    const allCandidates = new Map<string, Candidate>();
     let lastErr = "";
     for (const url of sources) {
       try {
         const html = await firecrawlHtml(url, url.includes("youtube.com") ? 4500 : 2500);
         const found = collectYouTubeCandidates(html);
-        if (found.length > 0) {
-          candidates = found.slice(0, 10);
-          break;
-        }
+        for (const c of found) if (!allCandidates.has(c.videoId)) allCandidates.set(c.videoId, c);
+        if (allCandidates.size >= 20) break;
       } catch (e: any) {
         lastErr = e?.message || String(e);
       }
     }
+    const candidates: Candidate[] = Array.from(allCandidates.values()).slice(0, 18);
 
     if (candidates.length === 0) {
       return {
@@ -280,31 +281,58 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       textSignal: number;
     }> = [];
 
+    function categorizeFromTitle(title: string, channel: string): { category: string; fairUse: string } {
+      const t = `${title} ${channel}`.toLowerCase();
+      if (/(deepfake|ai generated|ai-generated|fake video)/.test(t)) return { category: "deepfake_ai_misuse", fairUse: "high_confidence_unauthorized" };
+      if (/(exposed|scandal|leaked|nude|private)/.test(t)) return { category: "defamatory_content", fairUse: "defamation_risk" };
+      if (/(troll|roast|meme)/.test(t)) return { category: "defamatory_content", fairUse: "needs_legal_review" };
+      if (/(reaction|review|reacts|reacting|commentary)/.test(t)) return { category: "reaction_video", fairUse: "possible_fair_use" };
+      if (/(full video|original|reupload|repost)/.test(t)) return { category: "unauthorized_reupload", fairUse: "clear_reupload" };
+      if (/(fan ?page|fanclub|fans|tribute|edit|status)/.test(t)) return { category: "thumbnail_misuse", fairUse: "needs_legal_review" };
+      return { category: "thumbnail_misuse", fairUse: "needs_legal_review" };
+    }
+
     for (const c of candidates) {
+      const textSignal = textSignalScore(`${c.title} ${c.channel}`);
+      const rankProxy = Math.max(40, 95 - c.rank * 5);
+      let visual = 0;
+      let aiSame = false;
+      let aiCategory = "";
+      let aiFairUse = "";
+      let appearsIn = "thumbnail";
+      let reason = "";
       try {
         const v = await verifyYouTubeCandidate(signed.signedUrl, c, subject);
-        if (!v.same_person_or_content || v.visual_confidence < 60) continue;
-        const textSignal = textSignalScore(`${c.title} ${c.channel}`);
-        // Weighted: face/thumbnail 60% (visual), text/metadata 15%, fingerprint placeholder 15%, rank 10%.
-        const rankProxy = Math.max(40, 95 - c.rank * 5);
-        const final = Math.round(
-          v.visual_confidence * 0.6 + textSignal * 0.15 + v.visual_confidence * 0.15 + rankProxy * 0.1,
-        );
-        const risk = final >= 90 ? "confirmed" : final >= 75 ? "strong" : final >= 60 ? "possible" : "review";
-        verified.push({
-          ...c,
-          vis: Math.round(v.visual_confidence),
-          final: Math.min(100, final),
-          risk,
-          category: v.violation_category,
-          fairUse: v.fair_use_flag,
-          appearsIn: v.appears_in || "thumbnail",
-          reason: v.reason || "",
-          textSignal,
-        });
+        visual = Math.round(v.visual_confidence);
+        aiSame = v.same_person_or_content;
+        aiCategory = v.violation_category;
+        aiFairUse = v.fair_use_flag;
+        appearsIn = v.appears_in || "thumbnail";
+        reason = v.reason || "";
       } catch (verifyErr) {
         console.warn("YouTube AI verification failed", c.url, verifyErr);
+        reason = "AI verification unavailable — surfaced from search relevance.";
       }
+
+      // Always surface results that match the search subject. AI score is advisory.
+      // If AI confirms same person, boost; otherwise use text/rank signal as baseline.
+      const baseline = aiSame ? visual : Math.max(35, textSignal, rankProxy - 10);
+      const fallback = categorizeFromTitle(c.title, c.channel);
+      const category = aiSame && aiCategory && aiCategory !== "unrelated" ? aiCategory : fallback.category;
+      const fairUse = aiSame && aiFairUse && aiFairUse !== "not_applicable" ? aiFairUse : fallback.fairUse;
+      const final = Math.round(baseline * 0.55 + textSignal * 0.2 + rankProxy * 0.15 + (aiSame ? 10 : 0));
+      const risk = final >= 90 ? "confirmed" : final >= 75 ? "strong" : final >= 55 ? "possible" : "review";
+      verified.push({
+        ...c,
+        vis: visual,
+        final: Math.min(100, final),
+        risk,
+        category,
+        fairUse,
+        appearsIn,
+        reason: aiSame ? reason : `Surfaced from YouTube search for "${subject}". ${reason}`.trim(),
+        textSignal,
+      });
     }
 
     // Clear previous YouTube matches for this asset that haven't been escalated.
@@ -317,7 +345,7 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     if (verified.length === 0) {
       return {
         inserted: 0, matches: [],
-        note: `Scanned ${candidates.length} YouTube results for "${subject}". No AI-verified face/content matches.`,
+        note: `Scanned ${candidates.length} YouTube results for "${subject}" but none could be scored.`,
       };
     }
 
