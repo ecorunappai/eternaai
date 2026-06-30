@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Bot, Loader2, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Camera, Plus,
-  Search, UserSearch, Youtube, Instagram, FileSearch, Mail, Gavel, Eye, Copy, Ghost,
+  Search, UserSearch, Youtube, Instagram, Mail, Gavel, Eye, Copy, Ghost,
   Brain, Activity, ShieldCheck, ListChecks, Sparkles, Zap, Hand, Cog,
 } from "lucide-react";
 import { toast } from "sonner";
