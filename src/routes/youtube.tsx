@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, ImageOff, Search, FileText, Scale } from "lucide-react";
+import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
-import { runYouTubeScan } from "@/lib/youtube-matching.functions";
+import { runYouTubeScan, verifyYouTubeMatch } from "@/lib/youtube-matching.functions";
 import { createViolationFromMatch } from "@/lib/matching.functions";
 
 export const Route = createFileRoute("/youtube")({
