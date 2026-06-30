@@ -31,7 +31,21 @@ type Row = {
   detected_at: string;
   similarity: number | null;
   title?: string | null;
+  thumb?: string | null;
 };
+
+function ytThumb(url: string): string | null {
+  try {
+    const u = new URL(url);
+    let id = u.searchParams.get("v");
+    if (!id) {
+      const m = url.match(/(?:shorts\/|youtu\.be\/|embed\/)([A-Za-z0-9_-]{6,})/);
+      if (m) id = m[1];
+    }
+    return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+  } catch { return null; }
+}
+
 
 // Map discovered_matches.status → unified status
 const matchToUnified = (s: string): string => {
@@ -69,18 +83,22 @@ function Violations() {
     setLoading(true);
     const [vRes, mRes] = await Promise.all([
       supabase.from("violations").select("*").order("detected_at", { ascending: false }),
-      supabase.from("discovered_matches").select("id,platform,source_url,video_title,risk_level,status,final_confidence_score,created_at").order("created_at", { ascending: false }),
+      supabase.from("discovered_matches").select("id,platform,source_url,video_title,video_id,preview_url,risk_level,status,final_confidence_score,created_at").order("created_at", { ascending: false }),
     ]);
     const v: Row[] = (vRes.data ?? []).map((r: any) => ({
       id: r.id, source: "violation", platform: r.platform, url: r.infringing_url,
       threat: r.threat_level, status: r.status ?? "open",
       detected_at: r.detected_at, similarity: r.similarity_score,
+      thumb: r.platform === "YouTube" ? ytThumb(r.infringing_url ?? "") : null,
     }));
     const m: Row[] = (mRes.data ?? []).map((r: any) => ({
       id: r.id, source: "match", platform: r.platform ?? "Web", url: r.source_url,
       threat: r.risk_level ?? "medium", status: matchToUnified(r.status ?? "pending"),
       detected_at: r.created_at, similarity: r.final_confidence_score, title: r.video_title,
+      thumb: r.preview_url
+        ?? (r.video_id ? `https://i.ytimg.com/vi/${r.video_id}/hqdefault.jpg` : ytThumb(r.source_url ?? "")),
     }));
+
     const all = [...v, ...m].sort((a, b) => +new Date(b.detected_at) - +new Date(a.detected_at));
     setRows(all);
     setLoading(false);
@@ -168,6 +186,7 @@ function Violations() {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
               <tr>
+                <th className="text-left p-3 w-20">Preview</th>
                 <th className="text-left p-3">Platform</th>
                 <th className="text-left p-3">Source</th>
                 <th className="text-left p-3">Threat</th>
@@ -180,6 +199,15 @@ function Violations() {
             <tbody className="divide-y divide-border">
               {filtered.map((v) => (
                 <tr key={`${v.source}-${v.id}`} className="hover:bg-accent/30">
+                  <td className="p-3">
+                    <a href={v.url} target="_blank" rel="noreferrer" className="block h-12 w-20 overflow-hidden rounded-md border border-border bg-muted">
+                      {v.thumb ? (
+                        <img src={v.thumb} alt="" loading="lazy" className="h-full w-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                      ) : (
+                        <div className="grid h-full w-full place-items-center text-[10px] text-muted-foreground">{v.platform.slice(0, 2).toUpperCase()}</div>
+                      )}
+                    </a>
+                  </td>
                   <td className="p-3 font-medium">{v.platform}</td>
                   <td className="p-3 max-w-md">
                     {v.title && <div className="text-xs text-foreground truncate">{v.title}</div>}
@@ -187,6 +215,7 @@ function Violations() {
                       <span className="truncate">{v.url}</span><ExternalLink className="h-3 w-3 shrink-0" />
                     </a>
                   </td>
+
                   <td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold capitalize ${THREAT[v.threat] ?? "bg-muted text-muted-foreground"}`}>{v.threat}</span></td>
                   <td className="p-3 text-xs text-muted-foreground">{v.similarity != null ? `${Math.round(v.similarity)}%` : "—"}</td>
                   <td className="p-3">
