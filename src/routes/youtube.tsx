@@ -63,6 +63,7 @@ function YouTubeDash() {
   const [gatheringId, setGatheringId] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<Record<string, { caseId: string; emails: string[]; socials: { value: string; source_label: string }[]; title?: string; screenshot?: string }>>({});
   const scan = useServerFn(runYouTubeScan);
+  const scanAll = useServerFn(runMultiPlatformScan);
   const verifyFace = useServerFn(verifyYouTubeMatch);
   const escalate = useServerFn(createViolationFromMatch);
   const openCase = useServerFn(openCaseFromMatch);
@@ -72,7 +73,9 @@ function YouTubeDash() {
   async function load() {
     const [a, m] = await Promise.all([
       supabase.from("assets").select("id,title,asset_type,storage_path").eq("asset_type", "image").order("created_at", { ascending: false }),
-      supabase.from("discovered_matches").select("*").eq("discovered_via", "youtube_firecrawl_ai_verified").order("final_confidence_score", { ascending: false }),
+      supabase.from("discovered_matches").select("*")
+        .in("discovered_via", ["youtube_firecrawl_ai_verified", "multi_platform_firecrawl"])
+        .order("created_at", { ascending: false }),
     ]);
     const list = a.data ?? [];
     setAssets(list);
@@ -88,16 +91,35 @@ function YouTubeDash() {
   }
   useEffect(() => { if (user) load(); }, [user]);
 
-  const visible = matches.filter((m) => filter === "all" || m.asset_id === filter);
+  // Sort: newest first, then by final confidence (risk proxy).
+  const sorted = [...matches].sort((a, b) => {
+    const ta = new Date(a.created_at).getTime();
+    const tb = new Date(b.created_at).getTime();
+    if (tb !== ta) return tb - ta;
+    return Number(b.final_confidence_score ?? 0) - Number(a.final_confidence_score ?? 0);
+  });
+  const visible = sorted.filter((m) => filter === "all" || m.asset_id === filter);
+
+  // Per-platform counters across visible results.
+  const counters: Record<string, number> = {};
+  for (const m of visible) {
+    const p = (m.platform ?? "Website") as string;
+    counters[p] = (counters[p] ?? 0) + 1;
+  }
 
   async function onScan() {
-    if (!selectedAsset) return toast.error("Select a registered face/reference image first.");
-    if (!query.trim()) return toast.error("Enter a creator / celebrity name to discover videos.");
+    if (!query.trim()) return toast.error("Enter a creator / brand / subject name to monitor.");
     setScanning(true);
     try {
-      const r = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
-      if (r.inserted === 0) toast.message((r as any).note ?? "No matches");
-      else toast.success(`${r.inserted} suspected videos across ${(r as any).variants ?? 0} keyword variants for "${(r as any).query}"`);
+      // Fan out: YouTube (needs reference image) + all other platforms in parallel.
+      const tasks: Promise<any>[] = [scanAll({ data: { assetId: selectedAsset || null, query: query.trim() } })];
+      if (selectedAsset) tasks.push(scan({ data: { assetId: selectedAsset, query: query.trim() } }));
+      const results = await Promise.allSettled(tasks);
+      const counts = results.map((r) => r.status === "fulfilled" ? (r.value?.inserted ?? 0) : 0);
+      const total = counts.reduce((a, b) => a + b, 0);
+      const errs = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
+      if (total === 0) toast.message(errs[0] ? String(errs[0].reason?.message ?? errs[0].reason) : "No new matches surfaced.");
+      else toast.success(`${total} suspected matches across all platforms for "${query.trim()}"`);
       load();
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(false); }
@@ -118,8 +140,7 @@ function YouTubeDash() {
     try {
       const { caseId } = await openCase({ data: { matchId } });
       const inv = await investigate({ data: { caseId } });
-      const contacts = await findContacts({ data: { caseId } });
-      // fetch contact details
+      await findContacts({ data: { caseId } });
       const { data: rows } = await supabase.from("creator_contacts").select("contact_type,value,source_label").eq("case_id", caseId);
       const emails = (rows ?? []).filter(r => r.contact_type === "email").map(r => r.value);
       const socials = (rows ?? []).filter(r => r.contact_type !== "email").map(r => ({ value: r.value, source_label: r.source_label ?? "" }));
@@ -128,6 +149,7 @@ function YouTubeDash() {
     } catch (e) { toast.error((e as Error).message); }
     finally { setGatheringId(null); }
   }
+
 
 
 
