@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Bot, Loader2, ExternalLink, Mail, ShieldAlert, Eye, Send, Scale, FileText, Camera, Search, AlertTriangle, CheckCircle2, Edit3 } from "lucide-react";
+import { Bot, Loader2, ExternalLink, Mail, ShieldAlert, Eye, Send, Scale, FileText, Camera, Search, AlertTriangle, CheckCircle2, Edit3, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
@@ -30,6 +30,56 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   blocked: { label: "Blocked", tone: "bg-destructive/10 text-destructive" },
   failed: { label: "Failed", tone: "bg-destructive/10 text-destructive" },
 };
+
+function downloadEvidence(c: any, evidence: any[], contacts: any[], emails: any[]) {
+  const bundle = {
+    exported_at: new Date().toISOString(),
+    case: {
+      id: c.id,
+      subject_name: c.subject_name,
+      target_url: c.target_url,
+      platform: c.platform,
+      status: c.status,
+      page_title: c.page_title,
+      page_description: c.page_description,
+      created_at: c.created_at,
+    },
+    evidence: evidence.map((e) => ({
+      id: e.id,
+      evidence_type: e.evidence_type,
+      source_url: e.source_url,
+      content: e.content,
+      metadata: e.metadata,
+      created_at: e.created_at,
+    })),
+    contacts: contacts.map((x) => ({
+      contact_type: x.contact_type,
+      value: x.value,
+      source_label: x.source_label,
+      source_url: x.source_url,
+    })),
+    warning_emails: emails.map((e) => ({
+      status: e.status,
+      recipient_email: e.recipient_email,
+      subject: e.subject,
+      body: e.body,
+      fair_use_flag: e.fair_use_flag,
+      risk_level: e.risk_level,
+      deadline_hours: e.deadline_hours,
+      created_at: e.created_at,
+    })),
+  };
+  const safe = (c.subject_name || "case").replace(/[^a-z0-9-_]+/gi, "_").slice(0, 40);
+  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `eterna-evidence_${safe}_${c.id.slice(0, 8)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 function BrowserAgentPage() {
   const { user } = useAuth();
@@ -209,7 +259,17 @@ function BrowserAgentPage() {
 
               {/* Evidence */}
               <div className="rounded-xl border border-border bg-card">
-                <div className="border-b border-border p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2"><FileText className="h-3 w-3" /> Evidence ({evidence.length})</div>
+                <div className="border-b border-border p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                  <FileText className="h-3 w-3" /> Evidence ({evidence.length})
+                  {evidence.length > 0 && (
+                    <button
+                      onClick={() => downloadEvidence(selectedCase, evidence, contacts, emails)}
+                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] font-medium normal-case tracking-normal hover:bg-accent"
+                    >
+                      <Download className="h-3 w-3" /> Download Bundle
+                    </button>
+                  )}
+                </div>
                 {evidence.length === 0 ? <div className="p-4 text-xs text-muted-foreground">No evidence captured. Click "Browse & Capture Evidence".</div> : (
                   <ul className="divide-y divide-border max-h-[260px] overflow-y-auto">
                     {evidence.map((e) => (
