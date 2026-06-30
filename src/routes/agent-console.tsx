@@ -18,6 +18,7 @@ import {
   browserAgentStatus,
   getAgentLiveFrame,
 } from "@/lib/browser-agent-client.functions";
+import { getInstagramMonitorStatus, type InstagramMonitorStatus } from "@/lib/instagram-integration.functions";
 
 export const Route = createFileRoute("/agent-console")({
   head: () => ({ meta: [{ title: "Agent Console — Eterna AI" }] }),
@@ -270,6 +271,8 @@ function AgentConsolePage() {
   const approve = useServerFn(approveAgentTask);
   const cancel = useServerFn(cancelAgentTask);
   const status = useServerFn(browserAgentStatus);
+  const igStatusFn = useServerFn(getInstagramMonitorStatus);
+  const [igStatus, setIgStatus] = useState<InstagramMonitorStatus | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") localStorage.setItem(MODE_KEY, mode);
@@ -286,8 +289,10 @@ function AgentConsolePage() {
     if (!user) return;
     refreshList();
     status().then(setAgentOnline).catch(() => setAgentOnline({ online: false, configured: false, code: "probe_failed", reason: "probe failed" }));
+    igStatusFn().then(setIgStatus).catch(() => {});
     const t = window.setInterval(refreshList, 4000);
-    return () => clearInterval(t);
+    const ig = window.setInterval(() => igStatusFn().then(setIgStatus).catch(() => {}), 30000);
+    return () => { clearInterval(t); clearInterval(ig); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -456,6 +461,36 @@ function AgentConsolePage() {
               {testingConn ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
               Test connection
             </button>
+          </div>
+        );
+      })()}
+
+      {/* Instagram monitor account status (no credentials shown) */}
+      {igStatus && igStatus.state !== "not_configured" && (() => {
+        const tone =
+          igStatus.state === "logged_in" ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-800" :
+          igStatus.state === "needs_verification" ? "border-amber-500/40 bg-amber-500/10 text-amber-900" :
+          "border-border bg-card text-foreground";
+        const label =
+          igStatus.state === "logged_in" ? "Connected" :
+          igStatus.state === "needs_verification" ? "Manual verification required" :
+          igStatus.state === "error" ? "Login error" :
+          igStatus.state === "logged_out" ? "Not signed in (will log in on next scan)" :
+          igStatus.state;
+        return (
+          <div className={`mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-2 text-sm ${tone}`}>
+            <span className="flex items-center gap-2">
+              <Instagram className="h-4 w-4" />
+              <strong>Instagram monitor:</strong>
+              <span className="font-mono text-xs">@{igStatus.username ?? "—"}</span>
+              <span className="text-xs opacity-80">· {label}</span>
+              {igStatus.lastLoginAt && (
+                <span className="text-xs opacity-60">· last login {new Date(igStatus.lastLoginAt).toLocaleString()}</span>
+              )}
+            </span>
+            {igStatus.lastError && igStatus.state !== "logged_in" && (
+              <span className="text-xs opacity-80 max-w-[60%] truncate" title={igStatus.lastError}>{igStatus.lastError}</span>
+            )}
           </div>
         );
       })()}
