@@ -31,7 +31,21 @@ type Row = {
   detected_at: string;
   similarity: number | null;
   title?: string | null;
+  thumb?: string | null;
 };
+
+function ytThumb(url: string): string | null {
+  try {
+    const u = new URL(url);
+    let id = u.searchParams.get("v");
+    if (!id) {
+      const m = url.match(/(?:shorts\/|youtu\.be\/|embed\/)([A-Za-z0-9_-]{6,})/);
+      if (m) id = m[1];
+    }
+    return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : null;
+  } catch { return null; }
+}
+
 
 // Map discovered_matches.status → unified status
 const matchToUnified = (s: string): string => {
