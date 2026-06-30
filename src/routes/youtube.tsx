@@ -342,5 +342,3 @@ function Score({ label, v, bold }: { label: string; v: number; bold?: boolean })
   );
 }
 
-function FileTextIcon() { return <FileText className="h-3 w-3" />; } // keep tree-shake happy
-void FileTextIcon;
