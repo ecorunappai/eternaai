@@ -103,7 +103,7 @@ Rights owner: ${data.rightsOwnerName}
 Original/source: ${originalUrl ?? "(registered ownership certificate on file)"}
 Infringing URL: ${c.target_url}
 Page title: ${c.page_title ?? "(unknown)"}
-Similarity score: ${match?.confidence_score ?? "(n/a)"}
+Similarity score: ${match?.final_confidence_score ?? "(n/a)"}
 Subject/channel: ${c.subject_name ?? "(unknown)"}
 
 Return ONLY JSON: {"description":"...","legal_declaration":"...","risk_warnings":"..."}
