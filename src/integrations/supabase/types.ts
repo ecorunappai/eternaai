@@ -798,6 +798,150 @@ export type Database = {
           },
         ]
       }
+      takedown_cases: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          asset_id: string | null
+          assigned_manager: string | null
+          case_id: string | null
+          certificate_id: string | null
+          confirmation_screenshot_url: string | null
+          created_at: string
+          evidence_urls: Json
+          form_fields: Json
+          form_url: string | null
+          id: string
+          infringing_url: string
+          legal_declaration: string | null
+          match_id: string | null
+          matched_at: string | null
+          missing_fields: Json
+          notes: string | null
+          original_url: string | null
+          platform: string
+          response_deadline: string | null
+          rights_owner_email: string | null
+          rights_owner_name: string | null
+          risk_warnings: string | null
+          similarity_score: number | null
+          status: Database["public"]["Enums"]["takedown_status"]
+          submitted_at: string | null
+          takedown_type: Database["public"]["Enums"]["takedown_type"]
+          updated_at: string
+          user_id: string
+          violation_description: string | null
+          warning_email_id: string | null
+          warning_sent_at: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          asset_id?: string | null
+          assigned_manager?: string | null
+          case_id?: string | null
+          certificate_id?: string | null
+          confirmation_screenshot_url?: string | null
+          created_at?: string
+          evidence_urls?: Json
+          form_fields?: Json
+          form_url?: string | null
+          id?: string
+          infringing_url: string
+          legal_declaration?: string | null
+          match_id?: string | null
+          matched_at?: string | null
+          missing_fields?: Json
+          notes?: string | null
+          original_url?: string | null
+          platform: string
+          response_deadline?: string | null
+          rights_owner_email?: string | null
+          rights_owner_name?: string | null
+          risk_warnings?: string | null
+          similarity_score?: number | null
+          status?: Database["public"]["Enums"]["takedown_status"]
+          submitted_at?: string | null
+          takedown_type: Database["public"]["Enums"]["takedown_type"]
+          updated_at?: string
+          user_id: string
+          violation_description?: string | null
+          warning_email_id?: string | null
+          warning_sent_at?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          asset_id?: string | null
+          assigned_manager?: string | null
+          case_id?: string | null
+          certificate_id?: string | null
+          confirmation_screenshot_url?: string | null
+          created_at?: string
+          evidence_urls?: Json
+          form_fields?: Json
+          form_url?: string | null
+          id?: string
+          infringing_url?: string
+          legal_declaration?: string | null
+          match_id?: string | null
+          matched_at?: string | null
+          missing_fields?: Json
+          notes?: string | null
+          original_url?: string | null
+          platform?: string
+          response_deadline?: string | null
+          rights_owner_email?: string | null
+          rights_owner_name?: string | null
+          risk_warnings?: string | null
+          similarity_score?: number | null
+          status?: Database["public"]["Enums"]["takedown_status"]
+          submitted_at?: string | null
+          takedown_type?: Database["public"]["Enums"]["takedown_type"]
+          updated_at?: string
+          user_id?: string
+          violation_description?: string | null
+          warning_email_id?: string | null
+          warning_sent_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "takedown_cases_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "takedown_cases_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "enforcement_cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "takedown_cases_certificate_id_fkey"
+            columns: ["certificate_id"]
+            isOneToOne: false
+            referencedRelation: "certificates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "takedown_cases_match_id_fkey"
+            columns: ["match_id"]
+            isOneToOne: false
+            referencedRelation: "discovered_matches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "takedown_cases_warning_email_id_fkey"
+            columns: ["warning_email_id"]
+            isOneToOne: false
+            referencedRelation: "warning_emails"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           id: string
@@ -1038,6 +1182,28 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      takedown_status:
+        | "not_started"
+        | "evidence_missing"
+        | "ready"
+        | "preparing_form"
+        | "waiting_approval"
+        | "submitted"
+        | "platform_reviewing"
+        | "removed"
+        | "rejected"
+        | "counter_notice"
+        | "escalated_legal"
+      takedown_type:
+        | "youtube_copyright"
+        | "youtube_privacy"
+        | "youtube_impersonation"
+        | "instagram_copyright"
+        | "facebook_copyright"
+        | "tiktok_copyright"
+        | "website_dmca"
+        | "hosting_abuse"
+        | "google_delisting"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1166,6 +1332,30 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      takedown_status: [
+        "not_started",
+        "evidence_missing",
+        "ready",
+        "preparing_form",
+        "waiting_approval",
+        "submitted",
+        "platform_reviewing",
+        "removed",
+        "rejected",
+        "counter_notice",
+        "escalated_legal",
+      ],
+      takedown_type: [
+        "youtube_copyright",
+        "youtube_privacy",
+        "youtube_impersonation",
+        "instagram_copyright",
+        "facebook_copyright",
+        "tiktok_copyright",
+        "website_dmca",
+        "hosting_abuse",
+        "google_delisting",
+      ],
     },
   },
 } as const

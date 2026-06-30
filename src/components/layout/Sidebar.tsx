@@ -15,6 +15,7 @@ const primary: NavItem[] = [
   { to: "/youtube", label: "YouTube Monitor", icon: Youtube },
   { to: "/violations", label: "Violations", icon: AlertOctagon },
   { to: "/enforcement", label: "Enforcement", icon: Gavel },
+  { to: "/takedown", label: "Takedown Center", icon: Gavel },
   { to: "/browser-agent", label: "AI Browser Agent", icon: Bot },
   { to: "/certificates", label: "Certificates", icon: Award },
   { to: "/identity", label: "Digital Identity", icon: ShieldCheck },
