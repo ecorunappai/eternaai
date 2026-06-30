@@ -46,11 +46,15 @@ function Matching() {
 
   const visible = matches.filter((m) => selected === "all" || m.asset_id === selected);
 
-  async function onScan(assetId: string) {
+  async function onScan(assetId: string, mode: "real" | "demo" = "real") {
     setScanning(assetId);
     try {
-      const res = await scan({ data: { assetId } });
-      toast.success(`Discovered ${res.inserted} candidate matches`);
+      const res = mode === "real"
+        ? await realScan({ data: { assetId } })
+        : await scan({ data: { assetId } });
+      const note = (res as any).note;
+      if (res.inserted === 0) toast.message(note ?? "No matches found");
+      else toast.success(`Discovered ${res.inserted} ${mode === "real" ? "live" : "demo"} matches`);
       load();
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(null); }
