@@ -12,7 +12,7 @@ export async function runInstagram(ctx: RunCtx, input: any) {
   if (!profileUrl) throw new Error("profileUrl required");
   try {
     patchTask(taskId, { status: "navigating", nextAction: "Open profile" });
-    await page.goto(profileUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.goto(profileUrl, { waitUntil: "networkidle", timeout: 120000 });
     const guard = await guardPublicPage(page);
     if (!guard.ok) throw new Error(guard.reason);
 

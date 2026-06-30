@@ -25,7 +25,7 @@ export async function runTakedown(ctx: RunCtx, input: any) {
   const page = await ctxPage.newPage();
   try {
     patchTask(taskId, { status: "navigating", nextAction: `Open ${platform} report page` });
-    await page.goto(reportUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.goto(reportUrl, { waitUntil: "networkidle", timeout: 120000 });
     const guard = await guardPublicPage(page);
     if (!guard.ok) {
       appendStep(taskId, { phase: "guard", url: reportUrl, note: guard.reason });

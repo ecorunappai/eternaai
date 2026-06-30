@@ -18,7 +18,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     if (!channelUrl && input.query) {
       const q = encodeURIComponent(String(input.query));
       patchTask(taskId, { status: "navigating", nextAction: `Search: ${input.query}` });
-      await page.goto(`https://www.youtube.com/results?search_query=${q}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.goto(`https://www.youtube.com/results?search_query=${q}`, { waitUntil: "networkidle", timeout: 120000 });
       const guard = await guardPublicPage(page);
       if (!guard.ok) throw new Error(guard.reason);
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "search_results");
@@ -36,7 +36,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     for (const v of videoLinks.slice(0, 2)) {
       if (!v.url) continue;
       patchTask(taskId, { status: "navigating", nextAction: `Open video: ${v.title || v.url}` });
-      await page.goto(v.url, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.goto(v.url, { waitUntil: "networkidle", timeout: 120000 });
       const guard = await guardPublicPage(page);
       if (!guard.ok) { appendStep(taskId, { phase: "guard", url: page.url(), note: guard.reason }); continue; }
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, `video_${videosSeen.length + 1}`);
@@ -47,7 +47,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     // 3. Open channel
     if (channelUrl) {
       patchTask(taskId, { status: "navigating", nextAction: "Open channel" });
-      await page.goto(channelUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.goto(channelUrl, { waitUntil: "networkidle", timeout: 120000 });
       const guard = await guardPublicPage(page);
       if (!guard.ok) throw new Error(guard.reason);
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "channel");
@@ -56,7 +56,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
       // 4. About tab
       const aboutUrl = channelUrl.replace(/\/$/, "") + "/about";
       patchTask(taskId, { status: "extracting", nextAction: "Open About page" });
-      await page.goto(aboutUrl, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.goto(aboutUrl, { waitUntil: "networkidle", timeout: 120000 });
       const aboutShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "about");
       appendStep(taskId, { phase: "extracting", url: aboutUrl, note: "About page captured", screenshot: aboutShot });
 
