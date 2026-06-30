@@ -127,10 +127,11 @@ function Violations() {
 
   async function remove(row: Row) {
     if (!confirm("Delete this case?")) return;
-    const table = row.source === "violation" ? "violations" : "discovered_matches";
-    await supabase.from(table).delete().eq("id", row.id);
+    if (row.source === "violation") await supabase.from("violations").delete().eq("id", row.id);
+    else await supabase.from("discovered_matches").delete().eq("id", row.id);
     load();
   }
+
 
   const filters = ["all", "open", "in_review", "enforcement_sent", "resolved", "dismissed"];
 
