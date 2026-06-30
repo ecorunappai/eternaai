@@ -27,6 +27,9 @@ type Candidate = {
   isShort: boolean;
   rank: number;
   matchedKeyword: string;
+  publishedText?: string;
+  recencyHours?: number;
+  viewCount?: number;
 };
 
 const VerificationSchema = z.object({
@@ -54,17 +57,24 @@ function decodeHtml(value: string): string {
 }
 
 // English keyword pool. Each query becomes `${subject} ${suffix}`.
+// Latest-intent suffixes go first so date-filtered passes prioritize them.
 const ENGLISH_SUFFIXES = [
-  "", "reaction", "troll", "issue", "controversy", "exposed", "viral", "roast",
-  "news", "latest issue", "family issue", "interview reaction", "shorts",
-  "reels reaction", "fan video", "edit", "fake news", "leaked", "scandal",
-  "Malayalam troll", "Malayalam reaction", "Tamil reaction", "Tamil troll",
+  "latest", "news", "today", "this week", "breaking news", "latest video",
+  "latest news", "viral", "trending",
+  "", "reaction", "troll", "issue", "controversy", "exposed", "expose",
+  "roast", "interview", "commentary", "review", "podcast", "livestream",
+  "shorts", "fan video", "edit", "fake news", "leaked", "scandal",
+  "Malayalam troll", "Malayalam reaction", "Malayalam news",
+  "Tamil reaction", "Tamil troll", "Tamil news",
   "Hindi reaction", "Hindi news",
 ];
 
 // Regional keyword cues. If the subject contains non-Latin characters we also
 // append these. Users can also paste a native-script name directly as subject.
-const MALAYALAM_SUFFIXES = ["ട്രോൾ", "പ്രശ്നം", "വാർത്ത", "വിവാദം", "റിയാക്ഷൻ", "വൈറൽ", "ഫാൻസ്", "വീഡിയോ"];
+const MALAYALAM_SUFFIXES = [
+  "വാർത്ത", "ട്രോൾ", "വിവാദം", "പ്രശ്നം", "വൈറൽ",
+  "റിയാക്ഷൻ", "ഫാൻസ്", "വീഡിയോ", "ഇന്ന്", "ബ്രേക്കിംഗ്",
+];
 
 function isNonLatin(s: string) { return /[^\u0000-\u024F]/.test(s); }
 
@@ -125,11 +135,38 @@ function resultCategoryFromSignals(title: string, channel: string, _matchedKeywo
   return "needs_review";
 }
 
+// Convert YouTube "publishedTimeText" like "2 hours ago", "3 days ago",
+// "1 month ago", "Streamed 5 days ago" into approximate hours-since-upload.
+function parsePublishedAgo(text: string | undefined): number | undefined {
+  if (!text) return undefined;
+  const m = /(\d+)\s*(second|minute|hour|day|week|month|year)s?\s*ago/i.exec(text);
+  if (!m) return undefined;
+  const n = parseInt(m[1], 10);
+  const unit = m[2].toLowerCase();
+  const hours: Record<string, number> = {
+    second: 1 / 3600, minute: 1 / 60, hour: 1, day: 24,
+    week: 24 * 7, month: 24 * 30, year: 24 * 365,
+  };
+  return n * (hours[unit] ?? 0);
+}
+
+function parseViewCount(text: string | undefined): number | undefined {
+  if (!text) return undefined;
+  const m = /([\d.,]+)\s*([KMB]?)/i.exec(text.replace(/,/g, ""));
+  if (!m) return undefined;
+  const n = parseFloat(m[1].replace(/,/g, ""));
+  const mult = m[2].toUpperCase() === "B" ? 1e9 : m[2].toUpperCase() === "M" ? 1e6 : m[2].toUpperCase() === "K" ? 1e3 : 1;
+  return Math.round(n * mult);
+}
+
 function collectYouTubeCandidates(html: string, matchedKeyword: string, startRank: number): Candidate[] {
   const out: Map<string, Candidate> = new Map();
   const videoRegex = /"videoId":"([A-Za-z0-9_-]{11})"[^]*?"title":\{"runs":\[\{"text":"([^"]+)"/g;
   const ownerRegex = /"ownerText":\{"runs":\[\{"text":"([^"]+)"/;
   const longByline = /"longBylineText":\{"runs":\[\{"text":"([^"]+)"/;
+  const publishedRegex = /"publishedTimeText":\{"simpleText":"([^"]+)"/;
+  const viewCountRegex = /"viewCountText":\{(?:"simpleText":"([^"]+)"|"runs":\[\{"text":"([^"]+)")/;
+  const shortViewRegex = /"shortViewCountText":\{"simpleText":"([^"]+)"/;
   const shortsRegex = /"reelItemRenderer":\{"videoId":"([A-Za-z0-9_-]{11})"[^]*?"headline":\{"simpleText":"([^"]+)"/g;
   const shortsRegex2 = /"shortsLockupViewModel":\{[^]*?"videoId":"([A-Za-z0-9_-]{11})"[^]*?"text":"([^"]+)"/g;
 
@@ -140,11 +177,16 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
     if (out.has(id)) continue;
     const tail = html.slice(m.index, m.index + 4000);
     const channel = ownerRegex.exec(tail)?.[1] ?? longByline.exec(tail)?.[1] ?? "Unknown channel";
+    const publishedText = publishedRegex.exec(tail)?.[1];
+    const vcRaw = viewCountRegex.exec(tail);
+    const viewText = vcRaw?.[1] ?? vcRaw?.[2] ?? shortViewRegex.exec(tail)?.[1];
     out.set(id, {
       videoId: id, url: `https://www.youtube.com/watch?v=${id}`,
       thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
       title: decodeHtml(m[2]), channel: decodeHtml(channel),
       isShort: false, rank: rank++, matchedKeyword,
+      publishedText, recencyHours: parsePublishedAgo(publishedText),
+      viewCount: parseViewCount(viewText),
     });
   }
   for (const re of [shortsRegex, shortsRegex2]) {
@@ -182,6 +224,62 @@ function collectYouTubeCandidates(html: string, matchedKeyword: string, startRan
     }
   }
   return Array.from(out.values()).sort((a, b) => a.rank - b.rank);
+}
+
+// Compute a 0–100 trending score from upload recency + view velocity.
+// Recency dominates so brand-new uploads always outrank older ones.
+function computeTrendingScore(recencyHours: number | undefined, viewCount: number | undefined): number {
+  let s = 0;
+  if (recencyHours != null) {
+    if (recencyHours <= 6) s += 55;
+    else if (recencyHours <= 24) s += 45;
+    else if (recencyHours <= 24 * 3) s += 35;
+    else if (recencyHours <= 24 * 7) s += 25;
+    else if (recencyHours <= 24 * 30) s += 12;
+    else if (recencyHours <= 24 * 90) s += 4;
+  }
+  if (viewCount != null && recencyHours != null && recencyHours > 0) {
+    const perHour = viewCount / Math.max(1, recencyHours);
+    if (perHour >= 5000) s += 45;
+    else if (perHour >= 1000) s += 35;
+    else if (perHour >= 200) s += 25;
+    else if (perHour >= 50) s += 15;
+    else if (perHour >= 10) s += 8;
+  } else if (viewCount != null) {
+    if (viewCount >= 1e6) s += 20;
+    else if (viewCount >= 1e5) s += 12;
+    else if (viewCount >= 1e4) s += 6;
+  }
+  return Math.min(100, s);
+}
+
+function recencyLabel(hours: number | undefined): string {
+  if (hours == null) return "unknown";
+  if (hours <= 24) return "last_24h";
+  if (hours <= 24 * 7) return "last_7d";
+  if (hours <= 24 * 30) return "last_30d";
+  return "historical";
+}
+
+function contentTagsFor(title: string, channel: string, isShort: boolean): string[] {
+  const t = `${title} ${channel}`.toLowerCase();
+  const tags: string[] = [];
+  if (/(breaking|just in|live now)/.test(t)) tags.push("breaking_news");
+  if (/\b(news|വാർത്ത|report)\b/.test(t)) tags.push("news");
+  if (/(reaction|reacts|reacting|റിയാക്ഷൻ)/.test(t)) tags.push("reaction");
+  if (/(troll|roast|meme|ട്രോൾ)/.test(t)) tags.push("troll");
+  if (/(expose|exposed|scandal|leaked)/.test(t)) tags.push("expose");
+  if (/(controversy|വിവാദം|issue|പ്രശ്നം)/.test(t)) tags.push("controversy");
+  if (/(interview|podcast)/.test(t)) tags.push("interview");
+  if (/(fan ?page|fanclub|fans|tribute|edit|status|ഫാൻസ്)/.test(t)) tags.push("fan_edit");
+  if (/(full video|reupload|repost)/.test(t)) tags.push("reupload");
+  if (/(deepfake|ai[- ]generated|fake|impersonat)/.test(t)) tags.push("impersonation");
+  if (/(defam|slander)/.test(t)) tags.push("defamation_risk");
+  if (/(without permission|copyright|piracy)/.test(t)) tags.push("copyright_risk");
+  if (/(viral|trending|വൈറൽ)/.test(t)) tags.push("viral");
+  if (/(commentary|review|analysis)/.test(t)) tags.push("commentary");
+  if (isShort) tags.push("short");
+  return Array.from(new Set(tags));
 }
 
 async function firecrawlHtml(apiKey: string, url: string, waitFor = 2500): Promise<string> {
@@ -402,6 +500,11 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       );
       const risk = preFinal >= 60 ? "possible" : "review";
       const resultCategory = resultCategoryFromSignals(c.title, c.channel, c.matchedKeyword);
+      const tags = contentTagsFor(c.title, c.channel, c.isShort);
+      const trending = computeTrendingScore(c.recencyHours, c.viewCount);
+      const publishedAt = c.recencyHours != null
+        ? new Date(Date.now() - c.recencyHours * 3600 * 1000).toISOString()
+        : null;
       return {
         asset_id: assetId,
         user_id: userId,
@@ -420,7 +523,13 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         discovered_via: "youtube_firecrawl_ai_verified",
         result_category: resultCategory,
         is_owned: false,
-        notes: `KEYWORD:${c.matchedKeyword} | TYPE:${cls.risk} | NEW_DISCOVERY | Visual face verification pending — click Verify Face to confirm.`,
+        published_at: publishedAt,
+        recency_hours: c.recencyHours ?? null,
+        recency_label: recencyLabel(c.recencyHours),
+        view_count: c.viewCount ?? null,
+        trending_score: trending,
+        content_tags: tags,
+        notes: `KEYWORD:${c.matchedKeyword} | TYPE:${cls.risk} | UPLOADED:${c.publishedText ?? "unknown"} | VIEWS:${c.viewCount ?? "?"} | TRENDING:${trending} | NEW_DISCOVERY | Visual face verification pending — click Verify Face to confirm.`,
       };
     });
 

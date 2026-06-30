@@ -28,19 +28,34 @@ const FAIR_USE_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 const TABS: Array<{ id: string; label: string }> = [
-  { id: "latest", label: "Latest Videos" },
-  { id: "new_today", label: "New Discoveries" },
+  { id: "latest", label: "Latest (Newest First)" },
+  { id: "last_24h", label: "Last 24h" },
+  { id: "last_7d", label: "Last 7 Days" },
+  { id: "last_30d", label: "Last 30 Days" },
+  { id: "trending", label: "Trending Today" },
+  { id: "news", label: "Latest News" },
+  { id: "breaking_news", label: "Breaking News" },
+  { id: "troll", label: "Latest Troll" },
+  { id: "reaction", label: "Latest Reaction" },
+  { id: "expose", label: "Latest Expose" },
+  { id: "controversy", label: "Latest Controversies" },
+  { id: "viral", label: "Viral" },
+  { id: "commentary", label: "Commentary" },
+  { id: "short", label: "Latest Shorts" },
   { id: "official", label: "Official Content" },
   { id: "reupload", label: "Suspected Reupload" },
-  { id: "reaction", label: "Reaction" },
-  { id: "troll", label: "Troll" },
-  { id: "news", label: "News / Commentary" },
-  { id: "fan", label: "Fan / Edit" },
+  { id: "fan_edit", label: "Fan / Edit" },
   { id: "impersonation", label: "Impersonation" },
   { id: "needs_review", label: "Needs Review" },
-  { id: "historical", label: "Historical (2020–2024)" },
+  { id: "historical", label: "Historical Archive" },
   { id: "all", label: "All" },
 ];
+
+// Tag-driven tabs (matched against discovered_matches.content_tags[])
+const TAG_TABS = new Set([
+  "news", "breaking_news", "troll", "reaction", "expose",
+  "controversy", "viral", "commentary", "short", "fan_edit", "impersonation",
+]);
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60), sec = s % 60;
@@ -101,41 +116,82 @@ function YouTubeDash() {
   }, [selectedAsset]);
 
   const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }, []);
+  const now = Date.now();
+
+  // Sort all matches newest-first using published_at when available, falling
+  // back to created_at. This is the canonical ordering for every tab so old
+  // videos never appear above fresh uploads.
+  const matchesSorted = useMemo(() => {
+    return [...matches].sort((a, b) => {
+      const ap = a.published_at ? new Date(a.published_at).getTime() : 0;
+      const bp = b.published_at ? new Date(b.published_at).getTime() : 0;
+      if (ap !== bp) return bp - ap;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [matches]);
+
+  function hoursSinceUpload(m: any): number | null {
+    if (m.recency_hours != null) return Number(m.recency_hours);
+    if (m.published_at) return (now - new Date(m.published_at).getTime()) / 3600_000;
+    return null;
+  }
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: matches.length, latest: matches.length };
-    let newToday = 0, historical = 0;
-    for (const m of matches) {
-      const cat = m.is_owned ? "official" : (m.result_category ?? "needs_review");
-      c[cat] = (c[cat] ?? 0) + 1;
-      const created = new Date(m.created_at).getTime();
-      if (created >= todayStart) newToday++;
-      if (/\b20(20|21|22|23|24)\b/.test(String(m.notes ?? ""))) historical++;
+    const c: Record<string, number> = { all: matchesSorted.length, latest: matchesSorted.length };
+    let last24 = 0, last7 = 0, last30 = 0, trending = 0, historical = 0;
+    for (const m of matchesSorted) {
+      const h = hoursSinceUpload(m);
+      if (h != null) {
+        if (h <= 24) last24++;
+        if (h <= 24 * 7) last7++;
+        if (h <= 24 * 30) last30++;
+      }
+      if (Number(m.trending_score ?? 0) >= 60) trending++;
+      if (h == null || h > 24 * 90) historical++;
+      if (m.is_owned || m.result_category === "official") c.official = (c.official ?? 0) + 1;
+      const tags: string[] = Array.isArray(m.content_tags) ? m.content_tags : [];
+      for (const t of tags) c[t] = (c[t] ?? 0) + 1;
+      const cat = m.result_category ?? "needs_review";
+      if (["reupload", "needs_review"].includes(cat) && !m.is_owned) c[cat] = (c[cat] ?? 0) + 1;
     }
-    c.new_today = newToday;
-    c.historical = historical;
+    c.last_24h = last24; c.last_7d = last7; c.last_30d = last30;
+    c.trending = trending; c.historical = historical;
     return c;
-  }, [matches, todayStart]);
+  }, [matchesSorted, now]);
 
   const stats = useMemo(() => {
     const channels = new Set<string>();
     let newToday = 0; let last = 0;
-    for (const m of matches) {
+    for (const m of matchesSorted) {
       if (m.channel_name) channels.add(m.channel_name);
       const t = new Date(m.created_at).getTime();
       if (t >= todayStart) newToday++;
       if (t > last) last = t;
     }
-    return { total: matches.length, channels: channels.size, newToday, last };
-  }, [matches, todayStart]);
+    return { total: matchesSorted.length, channels: channels.size, newToday, last };
+  }, [matchesSorted, todayStart]);
+
+  // Latest Activity panel: surfaces the freshest discovered upload + risk.
+  const latestActivity = useMemo(() => {
+    const latestVideo = matchesSorted.find(m => m.published_at) ?? matchesSorted[0];
+    const trendingMax = matchesSorted.reduce((mx, m) => Math.max(mx, Number(m.trending_score ?? 0)), 0);
+    const last24Count = counts.last_24h ?? 0;
+    const risk = trendingMax >= 75 || last24Count >= 5 ? "High" : trendingMax >= 50 || last24Count >= 1 ? "Medium" : "Low";
+    return { latestVideo, trendingMax, last24Count, risk };
+  }, [matchesSorted, counts]);
 
   const visible = useMemo(() => {
-    if (tab === "all" || tab === "latest") return matches;
-    if (tab === "new_today") return matches.filter(m => new Date(m.created_at).getTime() >= todayStart);
-    if (tab === "historical") return matches.filter(m => /\b20(20|21|22|23|24)\b/.test(String(m.notes ?? "")));
-    if (tab === "official") return matches.filter(m => m.is_owned || m.result_category === "official");
-    return matches.filter(m => !m.is_owned && (m.result_category ?? "needs_review") === tab);
-  }, [matches, tab, todayStart]);
+    let list = matchesSorted;
+    if (tab === "all" || tab === "latest") return list;
+    if (tab === "last_24h") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24; });
+    if (tab === "last_7d") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24 * 7; });
+    if (tab === "last_30d") return list.filter(m => { const h = hoursSinceUpload(m); return h != null && h <= 24 * 30; });
+    if (tab === "trending") return [...list].sort((a, b) => Number(b.trending_score ?? 0) - Number(a.trending_score ?? 0)).filter(m => Number(m.trending_score ?? 0) >= 40);
+    if (tab === "historical") return list.filter(m => { const h = hoursSinceUpload(m); return h == null || h > 24 * 90; });
+    if (tab === "official") return list.filter(m => m.is_owned || m.result_category === "official");
+    if (TAG_TABS.has(tab)) return list.filter(m => Array.isArray(m.content_tags) && m.content_tags.includes(tab) && !m.is_owned);
+    return list.filter(m => !m.is_owned && (m.result_category ?? "needs_review") === tab);
+  }, [matchesSorted, tab, now]);
 
   const [liveJob, setLiveJob] = useState<any>(null);
 
@@ -240,12 +296,51 @@ function YouTubeDash() {
         </button>
       </div>
 
+      {/* Latest Activity — always at the top of the dashboard */}
+      <div className="mb-6 rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-card p-5">
+        <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+            </span>
+            <h2 className="text-sm font-semibold">Latest Activity</h2>
+          </div>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+            latestActivity.risk === "High" ? "bg-destructive/10 text-destructive border-destructive/40"
+            : latestActivity.risk === "Medium" ? "bg-amber-500/10 text-amber-700 border-amber-500/40"
+            : "bg-emerald-500/10 text-emerald-700 border-emerald-500/40"
+          }`}>Trending Risk: {latestActivity.risk}</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <ActivityCell label="Last Scan" value={stats.last ? new Date(stats.last).toLocaleString() : "—"} />
+          <ActivityCell label="New Discoveries (24h created)" value={String(stats.newToday)} accent />
+          <ActivityCell label="Uploaded < 24h" value={String(counts.last_24h ?? 0)} accent />
+          <ActivityCell label="Top Trending Score" value={`${Math.round(latestActivity.trendingMax)} / 100`} />
+        </div>
+        {latestActivity.latestVideo && (
+          <a href={latestActivity.latestVideo.source_url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-start gap-3 rounded-lg border border-border bg-background p-3 hover:bg-accent/30">
+            <img src={latestActivity.latestVideo.preview_url} alt="" className="h-14 w-24 rounded object-cover border border-border" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Latest Video</div>
+              <div className="text-sm font-medium truncate">{latestActivity.latestVideo.video_title}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {latestActivity.latestVideo.channel_name}
+                {latestActivity.latestVideo.published_at && ` · Published ${formatRelative(latestActivity.latestVideo.published_at)}`}
+                {latestActivity.latestVideo.view_count != null && ` · ${Number(latestActivity.latestVideo.view_count).toLocaleString()} views`}
+              </div>
+            </div>
+          </a>
+        )}
+      </div>
+
       <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total Videos Found" value={stats.total.toLocaleString()} />
         <StatCard label="Channels Found" value={stats.channels.toLocaleString()} />
-        <StatCard label="New Today" value={stats.newToday.toLocaleString()} accent />
-        <StatCard label="Last Scan" value={stats.last ? new Date(stats.last).toLocaleString() : "—"} />
+        <StatCard label="Uploaded < 7 Days" value={(counts.last_7d ?? 0).toLocaleString()} accent />
+        <StatCard label="Historical (90d+)" value={(counts.historical ?? 0).toLocaleString()} />
       </div>
+
 
       <div className="mb-6 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center gap-2">
@@ -376,7 +471,24 @@ function YouTubeDash() {
                         {segs.length > 0 && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 text-destructive border border-destructive/30 px-2 py-0.5 text-[10px] font-semibold"><Film className="h-3 w-3" /> {segs.length} matched segment{segs.length === 1 ? "" : "s"}</span>
                         )}
-                        <span className="ml-auto text-xs text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                        <span className="ml-auto flex items-center gap-1.5 text-xs">
+                          {m.published_at && (
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                              (Number(m.recency_hours ?? 9999) <= 24) ? "bg-destructive/10 text-destructive border-destructive/30"
+                              : (Number(m.recency_hours ?? 9999) <= 24*7) ? "bg-amber-500/10 text-amber-700 border-amber-500/30"
+                              : "bg-muted text-muted-foreground border-border"
+                            }`}>
+                              <Clock className="inline h-3 w-3 mr-0.5" /> {formatRelative(m.published_at)}
+                            </span>
+                          )}
+                          {Number(m.trending_score ?? 0) >= 40 && (
+                            <span className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">🔥 {Math.round(Number(m.trending_score))}</span>
+                          )}
+                          {m.view_count != null && (
+                            <span className="text-[10px] text-muted-foreground">{Number(m.view_count).toLocaleString()} views</span>
+                          )}
+                          <span className="text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
+                        </span>
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
                       <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
@@ -474,5 +586,28 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
       <div className={`mt-1 text-xl font-semibold ${accent ? "text-primary" : ""}`}>{value}</div>
     </div>
   );
+}
+
+function ActivityCell({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className={`rounded-lg border ${accent ? "border-primary/40 bg-primary/5" : "border-border bg-background"} p-3`}>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={`mt-0.5 text-sm font-semibold ${accent ? "text-primary" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+function formatRelative(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.round(diffMs / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hrs = Math.round(min / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.round(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.round(months / 12)}y ago`;
 }
 

@@ -265,6 +265,7 @@ export type Database = {
           asset_id: string
           channel_name: string | null
           clip_score: number | null
+          content_tags: string[] | null
           created_at: string
           dhash_score: number | null
           discovered_phash: string | null
@@ -281,14 +282,19 @@ export type Database = {
           phash_score: number | null
           platform: string | null
           preview_url: string | null
+          published_at: string | null
+          recency_hours: number | null
+          recency_label: string | null
           result_category: string | null
           risk_level: string | null
           segments_scanned: boolean
           source_url: string
           status: string | null
+          trending_score: number | null
           user_id: string
           video_id: string | null
           video_title: string | null
+          view_count: number | null
           violation_category: string | null
         }
         Insert: {
@@ -296,6 +302,7 @@ export type Database = {
           asset_id: string
           channel_name?: string | null
           clip_score?: number | null
+          content_tags?: string[] | null
           created_at?: string
           dhash_score?: number | null
           discovered_phash?: string | null
@@ -312,14 +319,19 @@ export type Database = {
           phash_score?: number | null
           platform?: string | null
           preview_url?: string | null
+          published_at?: string | null
+          recency_hours?: number | null
+          recency_label?: string | null
           result_category?: string | null
           risk_level?: string | null
           segments_scanned?: boolean
           source_url: string
           status?: string | null
+          trending_score?: number | null
           user_id: string
           video_id?: string | null
           video_title?: string | null
+          view_count?: number | null
           violation_category?: string | null
         }
         Update: {
@@ -327,6 +339,7 @@ export type Database = {
           asset_id?: string
           channel_name?: string | null
           clip_score?: number | null
+          content_tags?: string[] | null
           created_at?: string
           dhash_score?: number | null
           discovered_phash?: string | null
@@ -343,14 +356,19 @@ export type Database = {
           phash_score?: number | null
           platform?: string | null
           preview_url?: string | null
+          published_at?: string | null
+          recency_hours?: number | null
+          recency_label?: string | null
           result_category?: string | null
           risk_level?: string | null
           segments_scanned?: boolean
           source_url?: string
           status?: string | null
+          trending_score?: number | null
           user_id?: string
           video_id?: string | null
           video_title?: string | null
+          view_count?: number | null
           violation_category?: string | null
         }
         Relationships: [
