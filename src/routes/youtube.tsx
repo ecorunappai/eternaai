@@ -104,6 +104,9 @@ function YouTubeDash() {
       toast.success(`Evidence saved · ${emails.length} email(s), ${socials.length} social link(s)`);
     } catch (e) { toast.error((e as Error).message); }
     finally { setGatheringId(null); }
+  }
+
+
 
   async function onAction(matchId: string, action: "ignore" | "review" | "escalate") {
     try {
