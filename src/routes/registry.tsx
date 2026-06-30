@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch, ShieldCheck, X, Sparkles, Youtube, Instagram, Tag } from "lucide-react";
+import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch, ShieldCheck, X, Sparkles, Youtube, Instagram, Tag, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { hashImageFile, extractVideoKeyframes } from "@/lib/perceptual-hash";
 import { runYouTubeScan } from "@/lib/youtube-matching.functions";
+import { runWebScanEverywhere } from "@/lib/web-scan.functions";
 
 export const Route = createFileRoute("/registry")({
   head: () => ({ meta: [{ title: "Content Registry — Eterna AI" }] }),
