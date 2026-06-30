@@ -52,6 +52,83 @@ function TakedownPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
+  // ---------- YouTube account connection ----------
+  const getYtConn = useServerFn(getYoutubeConnection);
+  const startYtOAuth = useServerFn(startYoutubeOAuth);
+  const disconnectYt = useServerFn(disconnectYoutube);
+  const prepareYtReport = useServerFn(prepareYoutubeReport);
+  const markYtSubmitted = useServerFn(markYoutubeReportSubmitted);
+  const [yt, setYt] = useState<{ connection: any; oauthConfigured: boolean } | null>(null);
+  const [ytBusy, setYtBusy] = useState<string | null>(null);
+
+  async function refreshYt() {
+    try { setYt(await getYtConn({})); } catch { /* ignore */ }
+  }
+  useEffect(() => { if (user) refreshYt(); }, [user?.id]);
+
+  // Handle ?yt=... return from OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("yt");
+    if (!status) return;
+    if (status === "connected") toast.success("YouTube account connected");
+    else toast.error(`YouTube connect: ${status.replace(/_/g, " ")}`);
+    params.delete("yt");
+    const next = window.location.pathname + (params.toString() ? `?${params}` : "");
+    window.history.replaceState({}, "", next);
+    refreshYt();
+  }, []);
+
+  async function onConnectYt() {
+    setYtBusy("connect");
+    try {
+      const { authUrl } = await startYtOAuth({ data: { returnTo: "/takedown" } });
+      window.location.href = authUrl;
+    } catch (e: any) { toast.error(e.message); setYtBusy(null); }
+  }
+  async function onDisconnectYt() {
+    setYtBusy("disconnect");
+    try { await disconnectYt({}); toast.success("YouTube account disconnected"); await refreshYt(); }
+    catch (e: any) { toast.error(e.message); }
+    finally { setYtBusy(null); }
+  }
+  async function onPrepareYtReport() {
+    if (!active) return;
+    setYtBusy("prepare");
+    try {
+      await prepareYtReport({ data: { takedownId: active.id } });
+      toast.success("YouTube report prepared — review and submit");
+      await refresh();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setYtBusy(null); }
+  }
+  function openYtAssistant() {
+    if (!active?.youtube_report_payload) return;
+    const url = active.youtube_report_payload.form_url || "https://www.youtube.com/copyright_complaint_form";
+    try { (window.top ?? window).open(url, "_blank", "noopener,noreferrer"); }
+    catch { window.open(url, "_blank", "noopener,noreferrer"); }
+  }
+  async function onMarkYtSubmitted() {
+    if (!active) return;
+    setYtBusy("submitted");
+    try {
+      await markYtSubmitted({ data: { takedownId: active.id } });
+      toast.success("Marked submitted");
+      await refresh();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setYtBusy(null); }
+  }
+
+  const ytStatusLabel = (() => {
+    if (!yt?.connection || yt.connection.status !== "connected") return "Not Connected";
+    if (!active) return "Connected";
+    if (active.youtube_report_status === "submitted" || active.status === "submitted") return "Submitted";
+    if (active.youtube_report_status === "waiting_user_review") return "Waiting User Review";
+    if (active.youtube_report_status === "prepared") return "Report Prepared";
+    if ((active.evidence_urls?.length ?? 0) > 0) return "Evidence Ready";
+    return "Connected";
+  })();
+
   async function refresh() {
     if (!user) return;
     const [tdRes, caseRes] = await Promise.all([
