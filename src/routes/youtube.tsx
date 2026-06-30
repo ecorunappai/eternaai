@@ -270,6 +270,25 @@ function YouTubeDash() {
             </button>
           </div>
         )}
+        {liveJob && (
+          <div className="mt-4 rounded-lg border border-border bg-background p-3">
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                {liveJob.status === "running" ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : liveJob.status === "failed" ? <ShieldAlert className="h-3.5 w-3.5 text-destructive" /> : <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" />}
+                <span className="font-semibold capitalize">{String(liveJob.status).replace(/_/g, " ")}</span>
+                <span className="text-muted-foreground">· pass: {liveJob.current_pass ?? "—"}</span>
+                <span className="text-muted-foreground">· {liveJob.passes_done ?? 0}/{liveJob.total_passes ?? 0} passes</span>
+                <span className="text-muted-foreground">· {liveJob.candidates_found ?? 0} candidates</span>
+                {liveJob.new_count != null && liveJob.status !== "running" && <span className="text-emerald-600 font-semibold">+{liveJob.new_count} new</span>}
+              </div>
+              <button onClick={() => setLiveJob(null)} className="text-muted-foreground hover:text-foreground">Dismiss</button>
+            </div>
+            <div className="mt-2 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div className="h-full transition-all" style={{ width: `${liveJob.progress ?? 0}%`, background: "var(--gradient-violet)" }} />
+            </div>
+            {liveJob.error_message && <div className="mt-2 text-[11px] text-destructive">{liveJob.error_message}</div>}
+          </div>
+        )}
       </div>
 
       <div className="mb-4 flex flex-wrap gap-1.5 border-b border-border">
