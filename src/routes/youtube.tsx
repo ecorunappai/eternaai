@@ -70,7 +70,7 @@ function YouTubeDash() {
   async function load() {
     const [a, m, segs] = await Promise.all([
       supabase.from("assets").select("id,title,asset_type,storage_path").eq("asset_type", "image").order("created_at", { ascending: false }),
-      supabase.from("discovered_matches").select("*").eq("discovered_via", "youtube_firecrawl_ai_verified").order("final_confidence_score", { ascending: false }),
+      supabase.from("discovered_matches").select("*").eq("discovered_via", "youtube_firecrawl_ai_verified").order("created_at", { ascending: false }).limit(2000),
       supabase.from("video_segments").select("*").order("confidence", { ascending: false }),
     ]);
     const list = a.data ?? [];
