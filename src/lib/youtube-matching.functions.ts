@@ -259,6 +259,15 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
         plan.push({ url: ytSearch(q, mode.sp), matchedKeyword: q, pass: `yt_${mode.label}` });
       }
     }
+    // Pass 1b (PRIORITY): YouTube upload-date filters × recent intent keywords
+    // — guarantees this-week / this-month videos surface even when the cached
+    // result set is dominated by older uploads.
+    for (const df of DATE_FILTERS) {
+      for (const intent of RECENT_INTENT) {
+        const q = intent ? `${subject} ${intent}` : subject;
+        plan.unshift({ url: ytSearch(q, df.sp), matchedKeyword: q, pass: `yt_${df.label}` });
+      }
+    }
     // Pass 4: shorts-only filter on the base subject + top intent keywords.
     for (const q of [subject, `${subject} troll`, `${subject} reaction`]) {
       plan.push({ url: ytSearch(q, SHORTS_ONLY_SP), matchedKeyword: q, pass: "yt_shorts" });
