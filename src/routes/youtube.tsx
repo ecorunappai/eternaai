@@ -131,8 +131,16 @@ function YouTubeDash() {
   async function onScanSegments(matchId: string) {
     setSegmentScanId(matchId);
     try {
-      const r = await scanSegments({ data: { matchId, mode: "storyboard", deepPass: true } });
-      toast.success(`${r.segments} matched segment(s) found · ${r.frames_matched} frame hits across ${r.sprites_scanned}/${r.total_sprites} sprites · top ${r.top_confidence}%`);
+      const r: any = await scanSegments({ data: { matchId, mode: "storyboard", deepPass: true } });
+      if (r.engine === "metadata_thumbnail") {
+        if (r.segments > 0) {
+          toast.success(`Storyboard unavailable — fallback verified subject in thumbnail (${r.top_confidence}%).`);
+        } else {
+          toast.message("Storyboard unavailable. Fallback scan ran on metadata + thumbnail but found no visual match.");
+        }
+      } else {
+        toast.success(`${r.segments} matched segment(s) found · ${r.frames_matched} frame hits across ${r.sprites_scanned}/${r.total_sprites} sprites · top ${r.top_confidence}%`);
+      }
       setExpanded(s => ({ ...s, [matchId]: true }));
       load();
     } catch (e) { toast.error((e as Error).message); }
