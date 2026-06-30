@@ -13,7 +13,6 @@ import { Route as YoutubeRouteImport } from './routes/youtube'
 import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegistryRouteImport } from './routes/registry'
-import { Route as OwnedRouteImport } from './routes/owned'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
 import { Route as MatchingRouteImport } from './routes/matching'
 import { Route as IdentityRouteImport } from './routes/identity'
@@ -25,7 +24,6 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
-import { Route as AssetIdRouteImport } from './routes/asset.$id'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
 const YoutubeRoute = YoutubeRouteImport.update({
@@ -46,11 +44,6 @@ const SettingsRoute = SettingsRouteImport.update({
 const RegistryRoute = RegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OwnedRoute = OwnedRouteImport.update({
-  id: '/owned',
-  path: '/owned',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MonitoringRoute = MonitoringRouteImport.update({
@@ -108,11 +101,6 @@ const VerifyCertIdRoute = VerifyCertIdRouteImport.update({
   path: '/verify/$certId',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AssetIdRoute = AssetIdRouteImport.update({
-  id: '/asset/$id',
-  path: '/asset/$id',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiChatRoute = ApiChatRouteImport.update({
   id: '/api/chat',
   path: '/api/chat',
@@ -130,13 +118,11 @@ export interface FileRoutesByFullPath {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
-  '/owned': typeof OwnedRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
-  '/asset/$id': typeof AssetIdRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRoutesByTo {
@@ -150,13 +136,11 @@ export interface FileRoutesByTo {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
-  '/owned': typeof OwnedRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
-  '/asset/$id': typeof AssetIdRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRoutesById {
@@ -171,13 +155,11 @@ export interface FileRoutesById {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
-  '/owned': typeof OwnedRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
-  '/asset/$id': typeof AssetIdRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRouteTypes {
@@ -193,13 +175,11 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
-    | '/owned'
     | '/registry'
     | '/settings'
     | '/violations'
     | '/youtube'
     | '/api/chat'
-    | '/asset/$id'
     | '/verify/$certId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -213,13 +193,11 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
-    | '/owned'
     | '/registry'
     | '/settings'
     | '/violations'
     | '/youtube'
     | '/api/chat'
-    | '/asset/$id'
     | '/verify/$certId'
   id:
     | '__root__'
@@ -233,13 +211,11 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
-    | '/owned'
     | '/registry'
     | '/settings'
     | '/violations'
     | '/youtube'
     | '/api/chat'
-    | '/asset/$id'
     | '/verify/$certId'
   fileRoutesById: FileRoutesById
 }
@@ -254,13 +230,11 @@ export interface RootRouteChildren {
   IdentityRoute: typeof IdentityRoute
   MatchingRoute: typeof MatchingRoute
   MonitoringRoute: typeof MonitoringRoute
-  OwnedRoute: typeof OwnedRoute
   RegistryRoute: typeof RegistryRoute
   SettingsRoute: typeof SettingsRoute
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
   ApiChatRoute: typeof ApiChatRoute
-  AssetIdRoute: typeof AssetIdRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
 }
 
@@ -292,13 +266,6 @@ declare module '@tanstack/react-router' {
       path: '/registry'
       fullPath: '/registry'
       preLoaderRoute: typeof RegistryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/owned': {
-      id: '/owned'
-      path: '/owned'
-      fullPath: '/owned'
-      preLoaderRoute: typeof OwnedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/monitoring': {
@@ -378,13 +345,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VerifyCertIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/asset/$id': {
-      id: '/asset/$id'
-      path: '/asset/$id'
-      fullPath: '/asset/$id'
-      preLoaderRoute: typeof AssetIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/chat': {
       id: '/api/chat'
       path: '/api/chat'
@@ -406,25 +366,13 @@ const rootRouteChildren: RootRouteChildren = {
   IdentityRoute: IdentityRoute,
   MatchingRoute: MatchingRoute,
   MonitoringRoute: MonitoringRoute,
-  OwnedRoute: OwnedRoute,
   RegistryRoute: RegistryRoute,
   SettingsRoute: SettingsRoute,
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
   ApiChatRoute: ApiChatRoute,
-  AssetIdRoute: AssetIdRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

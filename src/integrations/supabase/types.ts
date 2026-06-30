@@ -265,7 +265,6 @@ export type Database = {
           asset_id: string
           channel_name: string | null
           clip_score: number | null
-          content_tags: string[] | null
           created_at: string
           dhash_score: number | null
           discovered_phash: string | null
@@ -274,27 +273,18 @@ export type Database = {
           fair_use_flag: string | null
           final_confidence_score: number | null
           id: string
-          is_owned: boolean
           match_type: string | null
           metadata_score: number | null
           notes: string | null
-          original_video_id: string | null
           phash_score: number | null
           platform: string | null
           preview_url: string | null
-          published_at: string | null
-          recency_hours: number | null
-          recency_label: string | null
-          result_category: string | null
           risk_level: string | null
-          segments_scanned: boolean
           source_url: string
           status: string | null
-          trending_score: number | null
           user_id: string
           video_id: string | null
           video_title: string | null
-          view_count: number | null
           violation_category: string | null
         }
         Insert: {
@@ -302,7 +292,6 @@ export type Database = {
           asset_id: string
           channel_name?: string | null
           clip_score?: number | null
-          content_tags?: string[] | null
           created_at?: string
           dhash_score?: number | null
           discovered_phash?: string | null
@@ -311,27 +300,18 @@ export type Database = {
           fair_use_flag?: string | null
           final_confidence_score?: number | null
           id?: string
-          is_owned?: boolean
           match_type?: string | null
           metadata_score?: number | null
           notes?: string | null
-          original_video_id?: string | null
           phash_score?: number | null
           platform?: string | null
           preview_url?: string | null
-          published_at?: string | null
-          recency_hours?: number | null
-          recency_label?: string | null
-          result_category?: string | null
           risk_level?: string | null
-          segments_scanned?: boolean
           source_url: string
           status?: string | null
-          trending_score?: number | null
           user_id: string
           video_id?: string | null
           video_title?: string | null
-          view_count?: number | null
           violation_category?: string | null
         }
         Update: {
@@ -339,7 +319,6 @@ export type Database = {
           asset_id?: string
           channel_name?: string | null
           clip_score?: number | null
-          content_tags?: string[] | null
           created_at?: string
           dhash_score?: number | null
           discovered_phash?: string | null
@@ -348,27 +327,18 @@ export type Database = {
           fair_use_flag?: string | null
           final_confidence_score?: number | null
           id?: string
-          is_owned?: boolean
           match_type?: string | null
           metadata_score?: number | null
           notes?: string | null
-          original_video_id?: string | null
           phash_score?: number | null
           platform?: string | null
           preview_url?: string | null
-          published_at?: string | null
-          recency_hours?: number | null
-          recency_label?: string | null
-          result_category?: string | null
           risk_level?: string | null
-          segments_scanned?: boolean
           source_url?: string
           status?: string | null
-          trending_score?: number | null
           user_id?: string
           video_id?: string | null
           video_title?: string | null
-          view_count?: number | null
           violation_category?: string | null
         }
         Relationships: [
@@ -377,13 +347,6 @@ export type Database = {
             columns: ["asset_id"]
             isOneToOne: false
             referencedRelation: "assets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "discovered_matches_original_video_id_fkey"
-            columns: ["original_video_id"]
-            isOneToOne: false
-            referencedRelation: "original_videos"
             referencedColumns: ["id"]
           },
         ]
@@ -528,181 +491,6 @@ export type Database = {
           },
         ]
       }
-      monitoring_profiles: {
-        Row: {
-          aliases: string[] | null
-          asset_id: string | null
-          auto_scan: boolean | null
-          brand_name: string | null
-          created_at: string
-          creator_name: string
-          id: string
-          keywords: string[] | null
-          last_scan_at: string | null
-          official_instagram_url: string | null
-          official_youtube_url: string | null
-          original_source_url: string | null
-          owner_name: string | null
-          platforms: string[] | null
-          regional_name: string | null
-          scan_frequency: string | null
-          status: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          aliases?: string[] | null
-          asset_id?: string | null
-          auto_scan?: boolean | null
-          brand_name?: string | null
-          created_at?: string
-          creator_name: string
-          id?: string
-          keywords?: string[] | null
-          last_scan_at?: string | null
-          official_instagram_url?: string | null
-          official_youtube_url?: string | null
-          original_source_url?: string | null
-          owner_name?: string | null
-          platforms?: string[] | null
-          regional_name?: string | null
-          scan_frequency?: string | null
-          status?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          aliases?: string[] | null
-          asset_id?: string | null
-          auto_scan?: boolean | null
-          brand_name?: string | null
-          created_at?: string
-          creator_name?: string
-          id?: string
-          keywords?: string[] | null
-          last_scan_at?: string | null
-          official_instagram_url?: string | null
-          official_youtube_url?: string | null
-          original_source_url?: string | null
-          owner_name?: string | null
-          platforms?: string[] | null
-          regional_name?: string | null
-          scan_frequency?: string | null
-          status?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "monitoring_profiles_asset_id_fkey"
-            columns: ["asset_id"]
-            isOneToOne: false
-            referencedRelation: "assets"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      original_videos: {
-        Row: {
-          channel_name: string | null
-          created_at: string
-          description: string | null
-          id: string
-          owned_account_id: string | null
-          phash: string | null
-          thumbnail_url: string | null
-          title: string | null
-          updated_at: string
-          upload_date: string | null
-          url: string
-          user_id: string
-          video_id: string
-        }
-        Insert: {
-          channel_name?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          owned_account_id?: string | null
-          phash?: string | null
-          thumbnail_url?: string | null
-          title?: string | null
-          updated_at?: string
-          upload_date?: string | null
-          url: string
-          user_id: string
-          video_id: string
-        }
-        Update: {
-          channel_name?: string | null
-          created_at?: string
-          description?: string | null
-          id?: string
-          owned_account_id?: string | null
-          phash?: string | null
-          thumbnail_url?: string | null
-          title?: string | null
-          updated_at?: string
-          upload_date?: string | null
-          url?: string
-          user_id?: string
-          video_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "original_videos_owned_account_id_fkey"
-            columns: ["owned_account_id"]
-            isOneToOne: false
-            referencedRelation: "owned_accounts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      owned_accounts: {
-        Row: {
-          channel_id: string | null
-          created_at: string
-          display_name: string
-          handle: string | null
-          id: string
-          is_verified: boolean
-          notes: string | null
-          platform: string
-          updated_at: string
-          url: string
-          user_id: string
-          verification_source: string | null
-        }
-        Insert: {
-          channel_id?: string | null
-          created_at?: string
-          display_name: string
-          handle?: string | null
-          id?: string
-          is_verified?: boolean
-          notes?: string | null
-          platform: string
-          updated_at?: string
-          url: string
-          user_id: string
-          verification_source?: string | null
-        }
-        Update: {
-          channel_id?: string | null
-          created_at?: string
-          display_name?: string
-          handle?: string | null
-          id?: string
-          is_verified?: boolean
-          notes?: string | null
-          platform?: string
-          updated_at?: string
-          url?: string
-          user_id?: string
-          verification_source?: string | null
-        }
-        Relationships: []
-      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -727,77 +515,6 @@ export type Database = {
         }
         Relationships: []
       }
-      scan_jobs: {
-        Row: {
-          asset_id: string | null
-          candidates_found: number
-          completed_at: string | null
-          created_at: string
-          current_pass: string | null
-          duplicates_skipped: number
-          error_message: string | null
-          id: string
-          kind: string
-          new_count: number
-          passes_done: number
-          progress: number
-          query: string | null
-          started_at: string
-          status: string
-          total_passes: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          asset_id?: string | null
-          candidates_found?: number
-          completed_at?: string | null
-          created_at?: string
-          current_pass?: string | null
-          duplicates_skipped?: number
-          error_message?: string | null
-          id?: string
-          kind?: string
-          new_count?: number
-          passes_done?: number
-          progress?: number
-          query?: string | null
-          started_at?: string
-          status?: string
-          total_passes?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          asset_id?: string | null
-          candidates_found?: number
-          completed_at?: string | null
-          created_at?: string
-          current_pass?: string | null
-          duplicates_skipped?: number
-          error_message?: string | null
-          id?: string
-          kind?: string
-          new_count?: number
-          passes_done?: number
-          progress?: number
-          query?: string | null
-          started_at?: string
-          status?: string
-          total_passes?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "scan_jobs_asset_id_fkey"
-            columns: ["asset_id"]
-            isOneToOne: false
-            referencedRelation: "assets"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       user_roles: {
         Row: {
           id: string
@@ -815,74 +532,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      video_segments: {
-        Row: {
-          clip_score: number | null
-          confidence: number
-          created_at: string
-          deep_link: string | null
-          detection_method: string
-          end_seconds: number
-          face_score: number | null
-          frame_count: number
-          frame_screenshot_url: string | null
-          id: string
-          match_id: string
-          match_type: string | null
-          notes: string | null
-          ocr_score: number | null
-          phash_score: number | null
-          start_seconds: number
-          user_id: string
-        }
-        Insert: {
-          clip_score?: number | null
-          confidence?: number
-          created_at?: string
-          deep_link?: string | null
-          detection_method?: string
-          end_seconds: number
-          face_score?: number | null
-          frame_count?: number
-          frame_screenshot_url?: string | null
-          id?: string
-          match_id: string
-          match_type?: string | null
-          notes?: string | null
-          ocr_score?: number | null
-          phash_score?: number | null
-          start_seconds: number
-          user_id: string
-        }
-        Update: {
-          clip_score?: number | null
-          confidence?: number
-          created_at?: string
-          deep_link?: string | null
-          detection_method?: string
-          end_seconds?: number
-          face_score?: number | null
-          frame_count?: number
-          frame_screenshot_url?: string | null
-          id?: string
-          match_id?: string
-          match_type?: string | null
-          notes?: string | null
-          ocr_score?: number | null
-          phash_score?: number | null
-          start_seconds?: number
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "video_segments_match_id_fkey"
-            columns: ["match_id"]
-            isOneToOne: false
-            referencedRelation: "discovered_matches"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       violations: {
         Row: {
