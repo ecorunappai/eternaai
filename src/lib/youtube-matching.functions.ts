@@ -130,7 +130,7 @@ function resultCategoryFromSignals(title: string, channel: string, _matchedKeywo
   if (/(deepfake|ai[- ]generated|fake video|fake celebrity|impersonat)/.test(t)) return "impersonation";
   if (/(reaction|reacts|reacting|റിയാക്ഷൻ)/.test(t)) return "reaction";
   if (/(troll|roast|meme|ട്രോൾ)/.test(t)) return "troll";
-  if (/\b(news|commentary|വാർത്ത|breaking|controversy|exposed|scandal|interview|podcast)\b/.test(t)) return "news";
+  if (/(\b(news|commentary|breaking|controversy|exposed|scandal|interview|podcast)\b|വാർത്ത|ന്യൂസ്|വിവാദം|പ്രശ്നം)/.test(t)) return "news";
   if (/(full video|reupload|repost|leaked|without permission)/.test(t)) return "reupload";
   if (/(fan ?page|fanclub|fans|tribute|status|ഫാൻസ്)/.test(t)) return "fan";
   return "needs_review";
@@ -366,8 +366,8 @@ function recencyLabel(hours: number | undefined): string {
 function contentTagsFor(title: string, channel: string, isShort: boolean): string[] {
   const t = `${title} ${channel}`.toLowerCase();
   const tags: string[] = [];
-  if (/(breaking|just in|live now)/.test(t)) tags.push("breaking_news");
-  if (/\b(news|വാർത്ത|report)\b/.test(t)) tags.push("news");
+  if (/(breaking|just in|live now|ബ്രേക്കിംഗ്)/.test(t)) tags.push("breaking_news");
+  if (/(\b(news|report|latest)\b|വാർത്ത|ന്യൂസ്|ഇന്ന്)/.test(t)) tags.push("news");
   if (/(reaction|reacts|reacting|റിയാക്ഷൻ)/.test(t)) tags.push("reaction");
   if (/(troll|roast|meme|ട്രോൾ)/.test(t)) tags.push("troll");
   if (/(expose|exposed|scandal|leaked)/.test(t)) tags.push("expose");
@@ -622,11 +622,45 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     // ---------- Incremental dedup against existing rows ----------
     const { data: existingRows } = await supabase
       .from("discovered_matches")
-      .select("video_id")
+      .select("id,video_id,published_at,recency_hours,view_count,video_title,channel_name,content_tags,trending_score")
       .eq("user_id", userId)
       .eq("asset_id", assetId)
       .eq("discovered_via", "youtube_firecrawl_ai_verified");
-    const existing = new Set((existingRows ?? []).map((r: any) => r.video_id).filter(Boolean));
+    const existingRowsByVideo = new Map((existingRows ?? []).filter((r: any) => r.video_id).map((r: any) => [r.video_id, r]));
+    const existing = new Set(existingRowsByVideo.keys());
+
+    // Rediscovered existing videos still need metadata repair. Older scans often
+    // inserted placeholder titles and no upload date, which made stale rows look
+    // like "today" because the UI could only show created_at. Patch those rows
+    // whenever a priority Today/Week/Month pass finds better recency data.
+    const metadataRepairs = candidates
+      .map((c) => {
+        const row: any = existingRowsByVideo.get(c.videoId);
+        if (!row) return null;
+        const tags = contentTagsFor(c.title, c.channel, c.isShort);
+        const trending = computeTrendingScore(c.recencyHours, c.viewCount);
+        const publishedAt = c.recencyHours != null
+          ? new Date(Date.now() - c.recencyHours * 3600 * 1000).toISOString()
+          : null;
+        const titleIsPlaceholder = !row.video_title || String(row.video_title).startsWith("YouTube video ") || String(row.video_title).startsWith("YouTube Short ");
+        const patch: Record<string, any> = {};
+        if (!row.published_at && publishedAt) patch.published_at = publishedAt;
+        if (row.recency_hours == null && c.recencyHours != null) patch.recency_hours = c.recencyHours;
+        if (row.view_count == null && c.viewCount != null) patch.view_count = c.viewCount;
+        if (titleIsPlaceholder && c.title && !c.title.startsWith("YouTube video ") && !c.title.startsWith("YouTube Short ")) patch.video_title = c.title;
+        if ((!row.channel_name || row.channel_name === "YouTube" || row.channel_name === "Unknown channel") && c.channel) patch.channel_name = c.channel;
+        if ((!Array.isArray(row.content_tags) || row.content_tags.length === 0) && tags.length) patch.content_tags = tags;
+        if (row.trending_score == null || Number(row.trending_score) < trending) patch.trending_score = trending;
+        if (Object.keys(patch).length === 0) return null;
+        patch.recency_label = recencyLabel(c.recencyHours);
+        patch.notes = `KEYWORD:${c.matchedKeyword} | TYPE:Metadata repaired | UPLOADED:${c.publishedText ?? c.discoveryWindow ?? "unknown"} | VIEWS:${c.viewCount ?? "?"} | TRENDING:${trending} | REDISCOVERED_PRIORITY_SCAN`;
+        return { id: row.id, patch };
+      })
+      .filter(Boolean) as Array<{ id: string; patch: Record<string, any> }>;
+
+    for (const repair of metadataRepairs.slice(0, 250)) {
+      await supabase.from("discovered_matches").update(repair.patch).eq("id", repair.id);
+    }
 
     const fresh = candidates.filter((c) => !existing.has(c.videoId));
 
