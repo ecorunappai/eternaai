@@ -32,7 +32,7 @@ function Matching() {
     ]);
     const list = a.data ?? [];
     setAssets(list);
-    setMatches(m.data ?? []);
+    setMatches((m.data ?? []).filter((match: any) => match.discovered_via !== "google_lens_firecrawl"));
     // Resolve signed URLs for thumbnails (images only)
     const map: Record<string, string> = {};
     await Promise.all(list.map(async (asset: any) => {
@@ -78,7 +78,7 @@ function Matching() {
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-display text-2xl font-semibold">Matching Engine</h1>
-          <p className="text-sm text-muted-foreground">pHash · dHash · CLIP-style embedding · AI verification across the open web.</p>
+          <p className="text-sm text-muted-foreground">pHash · dHash · reverse-image discovery · strict AI verification across the open web.</p>
         </div>
         <select value={selected} onChange={(e) => setSelected(e.target.value)} className="h-10 rounded-lg border border-border bg-card px-3 text-sm">
           <option value="all">All assets ({matches.length})</option>
@@ -90,7 +90,7 @@ function Matching() {
         <div className="mb-3 flex items-center gap-2">
           <ScanSearch className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Run Reverse-Image Scan</h2>
-          <span className="text-xs text-muted-foreground">Live: Google Lens via Firecrawl · returns real source URLs</span>
+          <span className="text-xs text-muted-foreground">Live: Google Lens via Firecrawl · saves only AI-verified matches</span>
         </div>
         {assets.length === 0 ? (
           <p className="text-sm text-muted-foreground">Register content first to enable matching.</p>
@@ -121,7 +121,7 @@ function Matching() {
                     style={{ background: "var(--gradient-violet)" }}
                   >
                     {scanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
-                    Live Scan
+                    Verified Scan
                   </button>
                   <button
                     disabled={!a.phash || scanning === a.id}

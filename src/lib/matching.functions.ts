@@ -4,7 +4,9 @@
 // platforms, then run pure scoring on the server.
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { generateText, Output } from "ai";
 import { z } from "zod";
+import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 import { computeScores } from "./matching";
 
 const PLATFORMS = [
@@ -105,6 +107,133 @@ const EXCLUDED_HOSTS = [
   "lens.google.com",
 ];
 
+const VerificationSchema = z.object({
+  same_content: z.boolean(),
+  confidence: z.number().min(0).max(100),
+  transformation: z.string().max(80).optional().default("visual comparison"),
+  reason: z.string().max(240).optional().default(""),
+});
+
+type Candidate = { url: string; host: string; rank: number; thumb: string | null };
+
+function decodeHtml(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function isExcludedHost(host: string): boolean {
+  return EXCLUDED_HOSTS.some((h) => host.includes(h));
+}
+
+function toAbsoluteUrl(raw: string | null | undefined, base = "https://lens.google.com"): string | null {
+  if (!raw) return null;
+  const decoded = decodeHtml(raw.trim());
+  if (!decoded || decoded.startsWith("data:")) return null;
+  try {
+    if (decoded.startsWith("//")) return `https:${decoded}`;
+    return new URL(decoded, base).toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeGoogleResultUrl(raw: string): { source: string | null; image: string | null } {
+  const absolute = toAbsoluteUrl(raw);
+  if (!absolute) return { source: null, image: null };
+  try {
+    const u = new URL(absolute);
+    const directImage = u.searchParams.get("imgurl") || u.searchParams.get("image_url");
+    const redirected =
+      u.searchParams.get("imgrefurl") ||
+      u.searchParams.get("url") ||
+      u.searchParams.get("q") ||
+      u.searchParams.get("u");
+    const source = redirected ? toAbsoluteUrl(redirected) : absolute;
+    return { source, image: directImage ? toAbsoluteUrl(directImage) : null };
+  } catch {
+    return { source: null, image: null };
+  }
+}
+
+function extractImgFromSnippet(snippet: string): string | null {
+  const srcset = snippet.match(/<img[^>]+srcset=["']([^"']+)["']/i)?.[1];
+  if (srcset) {
+    const first = srcset.split(",")[0]?.trim().split(/\s+/)[0];
+    const url = toAbsoluteUrl(first);
+    if (url) return url;
+  }
+  const src = snippet.match(/<img[^>]+(?:src|data-src)=["']([^"']+)["']/i)?.[1];
+  return toAbsoluteUrl(src);
+}
+
+function collectLensCandidates(html: string, linksRaw: string[]): Candidate[] {
+  const seen = new Set<string>();
+  const candidates: Candidate[] = [];
+
+  const add = (rawUrl: string, rank: number, thumb?: string | null) => {
+    const normalized = normalizeGoogleResultUrl(rawUrl);
+    const sourceUrl = normalized.source;
+    const previewUrl = normalized.image || toAbsoluteUrl(thumb) || null;
+    if (!sourceUrl) return;
+    try {
+      const u = new URL(sourceUrl);
+      if (!/^https?:$/.test(u.protocol)) return;
+      const host = u.hostname.toLowerCase();
+      if (isExcludedHost(host)) return;
+      const norm = `${u.origin}${u.pathname}`;
+      if (seen.has(norm)) return;
+      seen.add(norm);
+      candidates.push({ url: sourceUrl, host, rank, thumb: previewUrl });
+    } catch { /* skip */ }
+  };
+
+  const anchorRegex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>[\s\S]{0,1600}?<\/a>/gi;
+  let anchor: RegExpExecArray | null;
+  while ((anchor = anchorRegex.exec(html)) !== null) {
+    const surrounding = html.slice(Math.max(0, anchor.index - 450), Math.min(html.length, anchor.index + anchor[0].length + 900));
+    const thumb = extractImgFromSnippet(anchor[0]) || extractImgFromSnippet(surrounding);
+    add(anchor[1], candidates.length, thumb);
+  }
+
+  linksRaw.forEach((raw, idx) => add(raw, candidates.length + idx, null));
+  return candidates;
+}
+
+async function verifyWithAi(originalUrl: string, candidateUrl: string, candidateHost: string) {
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key) throw new Error("Missing LOVABLE_API_KEY for AI visual verification.");
+
+  const gateway = createLovableAiGatewayProvider(key);
+  const result = await generateText({
+    model: gateway("google/gemini-3-flash-preview"),
+    output: Output.object({ schema: VerificationSchema }),
+    temperature: 0,
+    maxRetries: 1,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              `You are Eterna AI's copyright matching verifier. Compare image A (registered original) with image B (candidate from ${candidateHost}).\n\n` +
+              "Return same_content=true ONLY when image B is the same exact creative work/photo/asset as image A, including resized, cropped, watermarked, recolored, compressed, reposted, or lightly edited versions. " +
+              "Return false for a different person, another woman/model, similar pose, similar clothes, same category, meme template, stock-lookalike, or visually related but not the same content. Be strict.",
+          },
+          { type: "file", data: new URL(originalUrl), mediaType: "image" },
+          { type: "file", data: new URL(candidateUrl), mediaType: "image" },
+        ],
+      },
+    ],
+  });
+
+  return result.output;
+}
+
 function platformFromHost(host: string): string {
   const map: Record<string, string> = {
     "twitter.com": "Twitter/X", "x.com": "Twitter/X",
@@ -144,7 +273,7 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
 
     const lensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(signed.signedUrl)}`;
 
-    // Firecrawl scrape — request links + html so we can extract result URLs and thumbnails
+    // Firecrawl scrape — request links + html so we can extract visual-result URLs and thumbnails.
     const fcRes = await fetch("https://api.firecrawl.dev/v2/scrape", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -166,41 +295,51 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
     const linksRaw: string[] = Array.isArray(payload?.links) ? payload.links : [];
     const html: string = typeof payload?.html === "string" ? payload.html : "";
 
-    // Extract thumbnail map: <img src="..."> near each anchor (best-effort)
-    const thumbMap = new Map<string, string>();
-    const imgRegex = /<a[^>]+href="([^"]+)"[^>]*>[\s\S]{0,400}?<img[^>]+src="([^"]+)"/gi;
-    let m: RegExpExecArray | null;
-    while ((m = imgRegex.exec(html)) !== null) {
-      if (!thumbMap.has(m[1])) thumbMap.set(m[1], m[2]);
-    }
-
-    // Normalise + filter
-    const seen = new Set<string>();
-    const candidates: { url: string; host: string; rank: number; thumb: string | null }[] = [];
-    linksRaw.forEach((raw, idx) => {
-      try {
-        const u = new URL(raw);
-        if (!/^https?:$/.test(u.protocol)) return;
-        const host = u.hostname.toLowerCase();
-        if (EXCLUDED_HOSTS.some((h) => host.includes(h))) return;
-        const norm = `${u.origin}${u.pathname}`;
-        if (seen.has(norm)) return;
-        seen.add(norm);
-        candidates.push({ url: raw, host, rank: idx, thumb: thumbMap.get(raw) ?? null });
-      } catch { /* skip */ }
-    });
+    const candidates = collectLensCandidates(html, linksRaw);
 
     if (candidates.length === 0) {
-      return { inserted: 0, matches: [], note: "Google Lens returned no external matches for this image." };
+      return { inserted: 0, matches: [], note: "Google Lens returned no external visual matches for this image." };
     }
 
-    // Take top 12 by rank
-    const top = candidates.slice(0, 12);
+    // Take top Lens candidates that include a preview image, then verify each with the AI vision layer.
+    const top = candidates.filter((c) => c.thumb).slice(0, 8);
+    const verified: Array<Candidate & { confidence: number; transformation: string; reason: string }> = [];
+    for (const candidate of top) {
+      try {
+        const verdict = await verifyWithAi(signed.signedUrl, candidate.thumb!, candidate.host);
+        if (verdict.same_content && verdict.confidence >= 78) {
+          verified.push({
+            ...candidate,
+            confidence: Math.round(verdict.confidence),
+            transformation: verdict.transformation || "AI visual match",
+            reason: verdict.reason || "AI verified same content",
+          });
+        }
+      } catch (verifyErr) {
+        console.warn("AI visual verification failed", candidate.url, verifyErr);
+      }
+    }
 
-    const rows = top.map((c, i) => {
-      // Confidence proxy: Lens result rank — top results are usually strongest visual matches.
-      // Decay from 92% down to ~45%.
-      const conf = Math.max(45, Math.round(92 - i * 4));
+    await supabase
+      .from("discovered_matches")
+      .delete()
+      .eq("asset_id", asset.id)
+      .eq("user_id", userId)
+      .in("discovered_via", ["google_lens_firecrawl", "google_lens_firecrawl_ai_verified"])
+      .neq("status", "escalated");
+
+    if (verified.length === 0) {
+      return {
+        inserted: 0,
+        matches: [],
+        note: "No AI-verified matches found. Similar-looking Google Lens results were filtered out.",
+      };
+    }
+
+    const rows = verified.map((c, i) => {
+      // Confidence now comes from strict multimodal AI comparison, with a tiny Lens-rank adjustment.
+      const rankProxy = Math.max(45, Math.round(92 - c.rank * 4));
+      const conf = Math.max(0, Math.min(100, Math.round(c.confidence * 0.9 + rankProxy * 0.1)));
       const risk = conf >= 85 ? "confirmed" : conf >= 70 ? "strong" : conf >= 55 ? "possible" : "review";
       return {
         asset_id: asset.id,
@@ -212,15 +351,15 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
         discovered_phash: null,
         phash_score: null,
         dhash_score: null,
-        clip_score: conf, // visual-rank proxy
+        clip_score: conf,
         metadata_score: null,
         ai_score: conf,
         final_confidence_score: conf,
         risk_level: risk,
-        match_type: "reverse_image",
+        match_type: c.transformation || "ai_verified_repost",
         status: "pending",
-        discovered_via: "google_lens_firecrawl",
-        notes: `Google Lens rank #${i + 1} via Firecrawl`,
+        discovered_via: "google_lens_firecrawl_ai_verified",
+        notes: `AI verified same content · Lens rank #${c.rank + 1} · ${c.reason}`,
       };
     });
 
