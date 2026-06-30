@@ -17,7 +17,8 @@ export interface RunCtx {
   taskId: string;
 }
 
-const queue = new PQueue({ concurrency: Number(process.env.AGENT_CONCURRENCY ?? 2) });
+// Hard cap: only ONE active Playwright session at a time. Additional tasks queue.
+const queue = new PQueue({ concurrency: 1 });
 
 const RUNNERS: Record<TaskType, (ctx: RunCtx, input: any) => Promise<void>> = {
   "youtube.investigate": runYouTube,

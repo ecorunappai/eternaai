@@ -348,6 +348,23 @@ function AgentConsolePage() {
     finally { setBusy(null); }
   }
 
+  async function onCancelAll() {
+    const active = tasks.filter((t) => !["completed", "failed", "cancelled"].includes(t.status));
+    if (!active.length) { toast.message("No active tasks to cancel"); return; }
+    if (typeof window !== "undefined" && !window.confirm(`Cancel ${active.length} active task(s)?`)) return;
+    setBusy("cancel-all");
+    let ok = 0, fail = 0;
+    for (const t of active) {
+      try {
+        await cancel({ data: { workerTaskId: t.worker_task_id ?? t.id } });
+        ok++;
+      } catch { fail++; }
+    }
+    toast.success(`Cancelled ${ok} task(s)${fail ? `, ${fail} failed` : ""}`);
+    await refreshList();
+    setBusy(null);
+  }
+
   return (
     <AppShell title="Agent Console">
       {/* Header */}
@@ -358,6 +375,13 @@ function AgentConsolePage() {
         </div>
         <div className="flex items-center gap-2">
           <ModeSwitcher mode={mode} setMode={setMode} />
+          <button
+            onClick={onCancelAll}
+            disabled={busy === "cancel-all"}
+            className="inline-flex items-center gap-1.5 rounded-md border border-destructive/30 bg-white px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/5 disabled:opacity-50"
+          >
+            {busy === "cancel-all" ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />} Cancel All
+          </button>
           <button onClick={() => setShowNew(true)} className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-semibold text-primary-foreground" style={{ background: "var(--gradient-violet)" }}>
             <Plus className="h-4 w-4" /> New Task
           </button>
