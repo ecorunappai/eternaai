@@ -208,9 +208,13 @@ function TakedownPage() {
               ) : null}
 
               <div className="flex flex-wrap gap-2 pt-2 border-t">
-                <a href={active.form_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent">
+                <button
+                  type="button"
+                  onClick={() => { try { (window.top ?? window).open(active.form_url, "_blank", "noopener,noreferrer"); } catch { window.open(active.form_url, "_blank", "noopener,noreferrer"); } }}
+                  className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs hover:bg-accent"
+                >
                   <ExternalLink className="h-3.5 w-3.5" /> Open platform form
-                </a>
+                </button>
                 <button onClick={() => act("approve_submit", { approver: form.assignedManager || "manager" })} disabled={!!busy || (active.missing_fields?.length ?? 0) > 0} className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs disabled:opacity-50">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Approve & Submit
                 </button>
@@ -286,9 +290,11 @@ function TakedownPage() {
                             onClick={() => { navigator.clipboard.writeText(autofill.bookmarklet); toast.success("Bookmarklet copied"); }}
                             className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs"
                           ><Copy className="h-3.5 w-3.5" /> Copy</button>
-                          <a href={autofill.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs hover:bg-accent">
-                            <ExternalLink className="h-3.5 w-3.5" /> Open form
-                          </a>
+                          <button
+                            type="button"
+                            onClick={() => { try { (window.top ?? window).open(autofill.url, "_blank", "noopener,noreferrer"); } catch { window.open(autofill.url, "_blank", "noopener,noreferrer"); } }}
+                            className="inline-flex items-center gap-1.5 rounded-md border px-2 py-1.5 text-xs hover:bg-accent"
+                          ><ExternalLink className="h-3.5 w-3.5" /> Open form</button>
                         </div>
                       </div>
 
