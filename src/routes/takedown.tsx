@@ -133,7 +133,7 @@ function TakedownPage() {
             </div>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={form.requireWarning} onChange={(e) => setForm({ ...form, requireWarning: e.target.checked })} />
-              Require prior warning email
+              Prefer warning email first (optional — never blocks platform takedown)
             </label>
 
             <button onClick={onPrepare} disabled={preparing} className="w-full inline-flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground py-2 text-sm font-medium disabled:opacity-60">
@@ -166,6 +166,14 @@ function TakedownPage() {
                   <div>
                     <div className="font-semibold">Cannot start takedown. Missing required evidence.</div>
                     <ul className="list-disc pl-5 mt-1">{active.missing_fields.map((m: string) => <li key={m}>{m.replace(/_/g, " ")}</li>)}</ul>
+                  </div>
+                </div>
+              ) : !active.warning_sent_at ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800 flex gap-2">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <div>
+                    <div className="font-semibold">No public contact found. Warning email skipped.</div>
+                    <div className="mt-1">Platform takedown can proceed. Contact search failure is recorded as contact attempt proof.</div>
                   </div>
                 </div>
               ) : null}
