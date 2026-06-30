@@ -220,6 +220,23 @@ function YouTubeDash() {
                         <Score label="Text Signal" v={m.metadata_score} />
                         <Score label="Final" v={m.final_confidence_score} bold />
                       </div>
+                      {evidence[m.id] && (
+                        <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs space-y-1.5">
+                          <div className="font-semibold text-primary flex items-center gap-1"><FolderSearch className="h-3.5 w-3.5" /> Evidence Gathered</div>
+                          {evidence[m.id].title && <div className="text-muted-foreground">Page: <span className="text-foreground">{evidence[m.id].title}</span></div>}
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">Emails ({evidence[m.id].emails.length})</div>
+                            {evidence[m.id].emails.length === 0 ? <div className="text-muted-foreground">None discovered publicly</div> :
+                              <ul className="space-y-0.5">{evidence[m.id].emails.map(e => <li key={e} className="flex items-center gap-1"><Mail className="h-3 w-3 text-primary" /><a href={`mailto:${e}`} className="text-primary hover:underline">{e}</a></li>)}</ul>}
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">Social / Contact links ({evidence[m.id].socials.length})</div>
+                            {evidence[m.id].socials.length === 0 ? <div className="text-muted-foreground">None discovered</div> :
+                              <ul className="space-y-0.5">{evidence[m.id].socials.slice(0, 8).map(s => <li key={s.value} className="flex items-center gap-1 truncate"><AtSign className="h-3 w-3 text-primary shrink-0" /><a href={s.value} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">{s.source_label || s.value}</a></li>)}</ul>}
+                          </div>
+                          <Link to="/browser-agent" className="inline-flex items-center gap-1 text-primary hover:underline mt-1"><ExternalLink className="h-3 w-3" /> Open in AI Browser Agent</Link>
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col gap-1.5 shrink-0">
                       <button
@@ -229,6 +246,14 @@ function YouTubeDash() {
                       >
                         {verifyingId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanFace className="h-3 w-3" />}
                         Verify Face
+                      </button>
+                      <button
+                        disabled={gatheringId === m.id}
+                        onClick={() => onGatherEvidence(m.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                      >
+                        {gatheringId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FolderSearch className="h-3 w-3" />}
+                        Gather Evidence
                       </button>
                       <button onClick={() => onAction(m.id, "review")} className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">
                         <Eye className="h-3 w-3" /> Review
