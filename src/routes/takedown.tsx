@@ -33,6 +33,9 @@ function TakedownPage() {
   const { user } = useAuth();
   const prepare = useServerFn(prepareTakedown);
   const review = useServerFn(reviewTakedown);
+  const buildAutofill = useServerFn(buildAutofillArtifacts);
+  const [autofill, setAutofill] = useState<any | null>(null);
+  const [autofillBusy, setAutofillBusy] = useState(false);
 
   const [cases, setCases] = useState<any[]>([]);
   const [takedowns, setTakedowns] = useState<any[]>([]);
