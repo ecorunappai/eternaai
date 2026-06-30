@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag } from "lucide-react";
+import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag, FolderSearch, Mail, AtSign } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
@@ -9,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
 import { runYouTubeScan, verifyYouTubeMatch } from "@/lib/youtube-matching.functions";
 import { createViolationFromMatch } from "@/lib/matching.functions";
+import { openCaseFromMatch, investigateCase, discoverContacts } from "@/lib/browser-agent.functions";
 
 export const Route = createFileRoute("/youtube")({
   head: () => ({ meta: [{ title: "YouTube Monitoring — Eterna AI" }] }),
