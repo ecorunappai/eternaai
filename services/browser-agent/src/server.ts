@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 import { investigateYouTube } from "./agents/youtube.agent.js";
 import { investigateInstagram } from "./agents/instagram.agent.js";
 import { discoverContacts } from "./agents/contact.agent.js";
+import { getInstagramStatus } from "./agents/instagram-session.js";
 import { captureEvidence } from "./agents/evidence.agent.js";
 import { enqueue, approve as approveTask, cancel as cancelTask } from "./tasks/queue.js";
 import { getTask, listTasks, subscribe } from "./tasks/store.js";
@@ -59,6 +60,16 @@ app.use((req, res, next) => {
 });
 
 app.get("/health", (_req, res) => res.json({ ok: true, service: "eterna-browser-agent" }));
+
+// Instagram monitor account status (no credentials returned).
+app.get("/integrations/instagram/status", async (_req, res) => {
+  try {
+    const s = await getInstagramStatus();
+    res.json(s);
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
 
 const YTSchema = z.object({
   videoUrl: z.string().url().optional().or(z.literal("")),
