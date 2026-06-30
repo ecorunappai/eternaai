@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_tasks: {
+        Row: {
+          case_id: string | null
+          created_at: string
+          error: string | null
+          extracted: Json
+          id: string
+          input: Json
+          next_action: string | null
+          screenshots: string[]
+          status: string
+          steps: Json
+          type: string
+          updated_at: string
+          user_id: string
+          worker_task_id: string | null
+        }
+        Insert: {
+          case_id?: string | null
+          created_at?: string
+          error?: string | null
+          extracted?: Json
+          id?: string
+          input?: Json
+          next_action?: string | null
+          screenshots?: string[]
+          status?: string
+          steps?: Json
+          type: string
+          updated_at?: string
+          user_id: string
+          worker_task_id?: string | null
+        }
+        Update: {
+          case_id?: string | null
+          created_at?: string
+          error?: string | null
+          extracted?: Json
+          id?: string
+          input?: Json
+          next_action?: string | null
+          screenshots?: string[]
+          status?: string
+          steps?: Json
+          type?: string
+          updated_at?: string
+          user_id?: string
+          worker_task_id?: string | null
+        }
+        Relationships: []
+      }
       asset_keyframes: {
         Row: {
           asset_id: string
