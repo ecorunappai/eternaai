@@ -311,14 +311,16 @@ function YouTubeDash() {
                       )}
                     </div>
                     <div className="flex flex-col gap-1.5 shrink-0">
-                      <button
-                        disabled={verifyingId === m.id}
-                        onClick={() => onVerifyFace(m.id)}
-                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
-                      >
-                        {verifyingId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanFace className="h-3 w-3" />}
-                        Verify Face
-                      </button>
+                      {platform === "YouTube" && (
+                        <button
+                          disabled={verifyingId === m.id}
+                          onClick={() => onVerifyFace(m.id)}
+                          className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                        >
+                          {verifyingId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanFace className="h-3 w-3" />}
+                          Verify Face
+                        </button>
+                      )}
                       <button
                         disabled={gatheringId === m.id}
                         onClick={() => onGatherEvidence(m.id)}
