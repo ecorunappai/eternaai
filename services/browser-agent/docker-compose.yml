@@ -5,8 +5,10 @@
 #   BROWSER_AGENT_TOKEN=<openssl rand -hex 32>
 #   PUBLIC_BASE_URL=https://browser-agent.yourdomain.com
 #
-# Put the same BROWSER_AGENT_URL + BROWSER_AGENT_TOKEN into the
-# Eterna app secrets so the Monitoring Engine can call this service.
+# Put the same BROWSER_AGENT_URL + BROWSER_AGENT_TOKEN into the Eterna app
+# secrets so the Monitoring Engine + Agent Console can call this service.
+#
+# See DEPLOY.md for the full production guide.
 
 name: eterna-browser-agent
 
@@ -15,20 +17,53 @@ services:
     build: .
     container_name: eterna-browser-agent
     restart: unless-stopped
+    expose:
+      - "8090"
     ports:
-      - "8090:8090"
+      # Optional: bind to localhost only when fronted by Caddy.
+      # Remove this line entirely if Caddy is the only ingress.
+      - "127.0.0.1:8090:8090"
     environment:
       - PORT=8090
-      - BROWSER_AGENT_TOKEN=${BROWSER_AGENT_TOKEN}
+      - BROWSER_AGENT_TOKEN=${BROWSER_AGENT_TOKEN:?BROWSER_AGENT_TOKEN is required}
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8090}
       - PW_HEADLESS=true
       - PW_TIMEOUT_MS=30000
+      - PW_CONCURRENCY=${PW_CONCURRENCY:-2}
+      - AGENT_DATA_DIR=/app
     shm_size: "1gb"
     volumes:
       - evidence_data:/app/evidence
+      - agent_data:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8090/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: eterna-browser-agent-caddy
+    restart: unless-stopped
+    depends_on:
+      - browser-agent
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
 volumes:
   evidence_data:
+  agent_data:
+  caddy_data:
+  caddy_config:
