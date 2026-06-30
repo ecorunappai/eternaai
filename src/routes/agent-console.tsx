@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   Bot, Loader2, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Camera, Plus,
   Search, UserSearch, Youtube, Instagram, Mail, Gavel, Eye, Copy, Ghost,
-  Brain, Activity, ShieldCheck, ListChecks, Sparkles, Zap, Hand, Cog,
+  Brain, Activity, ShieldCheck, ListChecks, Sparkles, Zap, Hand, Cog, Maximize2, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
