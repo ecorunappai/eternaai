@@ -193,8 +193,8 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     const apiKey = process.env.FIRECRAWL_API_KEY;
     if (!apiKey) throw new Error("Firecrawl is not connected. Link the Firecrawl connector and retry.");
 
-    let assetId: string | null = null;
-    if (data.assetId) {
+    let assetId: string;
+    {
       const { data: asset } = await supabase.from("assets").select("id,user_id").eq("id", data.assetId).maybeSingle();
       if (!asset || asset.user_id !== userId) throw new Error("Asset not found");
       assetId = asset.id;
