@@ -212,8 +212,16 @@ const SORT_MODES: Array<{ label: string; sp: string }> = [
   { label: "view_count", sp: "CAMSAhAB" },
 ];
 const SHORTS_ONLY_SP = "EgIYAQ%253D%253D";
+// YouTube upload-date filter chips (no sort encoded — combines cleanly with our default ordering).
+const DATE_FILTERS: Array<{ label: string; sp: string }> = [
+  { label: "today", sp: "EgIIAg%253D%253D" },
+  { label: "this_week", sp: "EgIIAw%253D%253D" },
+  { label: "this_month", sp: "EgIIBA%253D%253D" },
+];
 const YEAR_SUFFIXES = ["2026", "2025", "2024", "2023", "2022", "2021", "2020"];
 const GOOGLE_SUFFIXES = ["", "reaction", "troll", "issue", "controversy", "exposed", "scandal", "interview", "news", "podcast", "livestream"];
+// Recency intent keywords appended to date-filtered passes so the news/commentary tab refreshes.
+const RECENT_INTENT = ["", "news", "latest", "today", "controversy", "reaction", "troll", "interview", "viral"];
 
 export const runYouTubeScan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
