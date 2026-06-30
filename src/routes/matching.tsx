@@ -18,6 +18,7 @@ function Matching() {
   const { user } = useAuth();
   const [assets, setAssets] = useState<any[]>([]);
   const [matches, setMatches] = useState<any[]>([]);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string>("all");
   const [scanning, setScanning] = useState<string | null>(null);
   const scan = useServerFn(runMatchingScan);
@@ -25,11 +26,20 @@ function Matching() {
 
   async function load() {
     const [a, m] = await Promise.all([
-      supabase.from("assets").select("id,title,asset_type,phash,storage_path").order("created_at", { ascending: false }),
+      supabase.from("assets").select("id,title,asset_type,phash,storage_path,file_url").order("created_at", { ascending: false }),
       supabase.from("discovered_matches").select("*").order("final_confidence_score", { ascending: false }),
     ]);
-    setAssets(a.data ?? []);
+    const list = a.data ?? [];
+    setAssets(list);
     setMatches(m.data ?? []);
+    // Resolve signed URLs for thumbnails (images only)
+    const map: Record<string, string> = {};
+    await Promise.all(list.map(async (asset: any) => {
+      if (asset.asset_type !== "image" || !asset.storage_path) return;
+      const { data: signed } = await supabase.storage.from("assets").createSignedUrl(asset.storage_path, 3600);
+      if (signed?.signedUrl) map[asset.id] = signed.signedUrl;
+    }));
+    setThumbs(map);
   }
   useEffect(() => { if (user) load(); }, [user]);
 
