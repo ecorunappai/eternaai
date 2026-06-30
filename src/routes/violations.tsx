@@ -117,14 +117,13 @@ function Violations() {
   }
 
   async function updateStatus(row: Row, status: string) {
-    const table = row.source === "violation" ? "violations" : "discovered_matches";
-    const payload = row.source === "violation"
-      ? { status, updated_at: new Date().toISOString() }
-      : { status: unifiedToMatch(status) };
-    const { error } = await supabase.from(table).update(payload).eq("id", row.id);
+    const { error } = row.source === "violation"
+      ? await supabase.from("violations").update({ status, updated_at: new Date().toISOString() }).eq("id", row.id)
+      : await supabase.from("discovered_matches").update({ status: unifiedToMatch(status) }).eq("id", row.id);
     if (error) toast.error(error.message);
     else { toast.success(`Marked ${status.replace("_", " ")}`); load(); }
   }
+
 
   async function remove(row: Row) {
     if (!confirm("Delete this case?")) return;
