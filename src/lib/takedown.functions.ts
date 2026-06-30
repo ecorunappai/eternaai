@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateText } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { PLATFORM_PLANS } from "./takedown-autofill";
 
 export const TAKEDOWN_FORM_URLS: Record<string, string> = {
   youtube_copyright: "https://www.youtube.com/copyright_complaint_form",
