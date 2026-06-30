@@ -121,7 +121,7 @@ function YouTubeDash() {
             </label>
             <label className="block">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Search query (creator / celebrity name)</div>
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Taylor Swift reaction" className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Ahaana Krishna" className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" />
             </label>
             <button disabled={scanning || !selectedAsset} onClick={onScan} className="inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" style={{ background: "var(--gradient-violet)" }}>
               {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Youtube className="h-4 w-4" />}
