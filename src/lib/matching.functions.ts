@@ -114,7 +114,7 @@ export const createViolationFromMatch = createServerFn({ method: "POST" })
       asset_id: m.asset_id,
       match_id: m.id,
       platform: m.platform,
-      infringing_url: m.source_url ?? "" as string,
+      infringing_url: (m.source_url ?? "unknown"),
       similarity_score: score,
       confidence_score: score,
       threat_level: threat,
