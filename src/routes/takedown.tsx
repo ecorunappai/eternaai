@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { Gavel, Loader2, ShieldCheck, ExternalLink, AlertTriangle, CheckCircle2, Edit3, Scale, X, FileText, Camera, Wand2, Download, Copy, Mail } from "lucide-react";
+import { Gavel, Loader2, ShieldCheck, ExternalLink, AlertTriangle, CheckCircle2, Edit3, Scale, X, FileText, Camera, Wand2, Download, Copy, Mail, Youtube, Link2, Unlink } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { prepareTakedown, reviewTakedown, buildAutofillArtifacts, TAKEDOWN_FORM_URLS, TAKEDOWN_LABELS } from "@/lib/takedown.functions";
+import { getYoutubeConnection, startYoutubeOAuth, disconnectYoutube, prepareYoutubeReport, markYoutubeReportSubmitted } from "@/lib/youtube-connect.functions";
 
 export const Route = createFileRoute("/takedown")({
   head: () => ({ meta: [{ title: "Takedown Center — Eterna AI" }] }),
