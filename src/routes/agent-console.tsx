@@ -18,6 +18,7 @@ import {
   browserAgentStatus,
   getAgentLiveFrame,
 } from "@/lib/browser-agent-client.functions";
+import { getInstagramMonitorStatus, type InstagramMonitorStatus } from "@/lib/instagram-integration.functions";
 
 export const Route = createFileRoute("/agent-console")({
   head: () => ({ meta: [{ title: "Agent Console — Eterna AI" }] }),
