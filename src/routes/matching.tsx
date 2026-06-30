@@ -7,7 +7,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
-import { runMatchingScan, createViolationFromMatch } from "@/lib/matching.functions";
+import { runMatchingScan, runRealMatchingScan, createViolationFromMatch } from "@/lib/matching.functions";
 
 export const Route = createFileRoute("/matching")({
   head: () => ({ meta: [{ title: "Matching Engine — Eterna AI" }] }),
