@@ -17,8 +17,11 @@ import { Route as IdentityRouteImport } from './routes/identity'
 import { Route as EnforcementRouteImport } from './routes/enforcement'
 import { Route as EliteRouteImport } from './routes/elite'
 import { Route as CertificatesRouteImport } from './routes/certificates'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
+import { Route as ApiChatRouteImport } from './routes/api/chat'
 
 const ViolationsRoute = ViolationsRouteImport.update({
   id: '/violations',
@@ -60,6 +63,11 @@ const CertificatesRoute = CertificatesRouteImport.update({
   path: '/certificates',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AssistantRoute = AssistantRouteImport.update({
   id: '/assistant',
   path: '/assistant',
@@ -70,10 +78,21 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VerifyCertIdRoute = VerifyCertIdRouteImport.update({
+  id: '/verify/$certId',
+  path: '/verify/$certId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiChatRoute = ApiChatRouteImport.update({
+  id: '/api/chat',
+  path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
+  '/auth': typeof AuthRoute
   '/certificates': typeof CertificatesRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
@@ -82,10 +101,13 @@ export interface FileRoutesByFullPath {
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
+  '/api/chat': typeof ApiChatRoute
+  '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
+  '/auth': typeof AuthRoute
   '/certificates': typeof CertificatesRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
@@ -94,11 +116,14 @@ export interface FileRoutesByTo {
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
+  '/api/chat': typeof ApiChatRoute
+  '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/assistant': typeof AssistantRoute
+  '/auth': typeof AuthRoute
   '/certificates': typeof CertificatesRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
@@ -107,12 +132,15 @@ export interface FileRoutesById {
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
+  '/api/chat': typeof ApiChatRoute
+  '/verify/$certId': typeof VerifyCertIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/assistant'
+    | '/auth'
     | '/certificates'
     | '/elite'
     | '/enforcement'
@@ -121,10 +149,13 @@ export interface FileRouteTypes {
     | '/registry'
     | '/settings'
     | '/violations'
+    | '/api/chat'
+    | '/verify/$certId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/assistant'
+    | '/auth'
     | '/certificates'
     | '/elite'
     | '/enforcement'
@@ -133,10 +164,13 @@ export interface FileRouteTypes {
     | '/registry'
     | '/settings'
     | '/violations'
+    | '/api/chat'
+    | '/verify/$certId'
   id:
     | '__root__'
     | '/'
     | '/assistant'
+    | '/auth'
     | '/certificates'
     | '/elite'
     | '/enforcement'
@@ -145,11 +179,14 @@ export interface FileRouteTypes {
     | '/registry'
     | '/settings'
     | '/violations'
+    | '/api/chat'
+    | '/verify/$certId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AssistantRoute: typeof AssistantRoute
+  AuthRoute: typeof AuthRoute
   CertificatesRoute: typeof CertificatesRoute
   EliteRoute: typeof EliteRoute
   EnforcementRoute: typeof EnforcementRoute
@@ -158,6 +195,8 @@ export interface RootRouteChildren {
   RegistryRoute: typeof RegistryRoute
   SettingsRoute: typeof SettingsRoute
   ViolationsRoute: typeof ViolationsRoute
+  ApiChatRoute: typeof ApiChatRoute
+  VerifyCertIdRoute: typeof VerifyCertIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -218,6 +257,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CertificatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/assistant': {
       id: '/assistant'
       path: '/assistant'
@@ -232,12 +278,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/verify/$certId': {
+      id: '/verify/$certId'
+      path: '/verify/$certId'
+      fullPath: '/verify/$certId'
+      preLoaderRoute: typeof VerifyCertIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/chat': {
+      id: '/api/chat'
+      path: '/api/chat'
+      fullPath: '/api/chat'
+      preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AssistantRoute: AssistantRoute,
+  AuthRoute: AuthRoute,
   CertificatesRoute: CertificatesRoute,
   EliteRoute: EliteRoute,
   EnforcementRoute: EnforcementRoute,
@@ -246,6 +307,8 @@ const rootRouteChildren: RootRouteChildren = {
   RegistryRoute: RegistryRoute,
   SettingsRoute: SettingsRoute,
   ViolationsRoute: ViolationsRoute,
+  ApiChatRoute: ApiChatRoute,
+  VerifyCertIdRoute: VerifyCertIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

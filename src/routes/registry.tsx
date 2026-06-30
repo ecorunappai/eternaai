@@ -1,85 +1,124 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { Upload, FileStack, Loader2, Trash2, ExternalLink } from "lucide-react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
-import { FileStack, Image as ImageIcon, Music, Video, FileText, Upload, MoreHorizontal } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/registry")({
-  head: () => ({ meta: [{ title: "Content Registry — Eterna AI" }, { name: "description", content: "Register photos, videos, music and documents to generate immutable ownership records." }] }),
+  head: () => ({ meta: [{ title: "Content Registry — Eterna AI" }] }),
   component: Registry,
 });
 
-const assets = [
-  { name: "Brand Launch Reel.mp4", type: "Video", size: "184 MB", hash: "0xc4f2…91ab", date: "Nov 28, 2024", icon: Video },
-  { name: "Editorial Portrait #214", type: "Photo", size: "12.4 MB", hash: "0x8de1…a204", date: "Nov 27, 2024", icon: ImageIcon },
-  { name: "Podcast Ep. 14 — Master", type: "Audio", size: "96.2 MB", hash: "0x71fa…be03", date: "Nov 25, 2024", icon: Music },
-  { name: "Whitepaper — Q4 Strategy", type: "Document", size: "3.1 MB", hash: "0x2a90…77cd", date: "Nov 22, 2024", icon: FileText },
-  { name: "Logo Mark Vector Set", type: "Design", size: "1.8 MB", hash: "0x55b1…0c22", date: "Nov 19, 2024", icon: ImageIcon },
-];
+async function sha256Hex(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const hash = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function detectType(mime: string): string {
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("video/")) return "video";
+  if (mime.startsWith("audio/")) return "audio";
+  return "document";
+}
 
 function Registry() {
+  const { user } = useAuth();
+  const [assets, setAssets] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function load() {
+    const { data } = await supabase.from("assets").select("*").order("created_at", { ascending: false });
+    setAssets(data ?? []);
+  }
+  useEffect(() => { if (user) load(); }, [user]);
+
+  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length || !user) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const sha = await sha256Hex(file);
+        const path = `${user.id}/${Date.now()}-${file.name}`;
+        const { error: upErr } = await supabase.storage.from("assets").upload(path, file);
+        if (upErr) throw upErr;
+        const { error } = await supabase.from("assets").insert({
+          user_id: user.id, title: file.name, asset_type: detectType(file.type),
+          storage_path: path, file_size: file.size, mime_type: file.type, sha256: sha,
+        });
+        if (error) throw error;
+      }
+      toast.success(`${files.length} asset(s) registered with SHA-256 fingerprint`);
+      load();
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setUploading(false); if (fileRef.current) fileRef.current.value = ""; }
+  }
+
+  async function remove(a: any) {
+    if (!confirm(`Delete "${a.title}"?`)) return;
+    if (a.storage_path) await supabase.storage.from("assets").remove([a.storage_path]);
+    await supabase.from("assets").delete().eq("id", a.id);
+    toast.success("Removed");
+    load();
+  }
+
+  async function issueCert(a: any) {
+    if (!user) return;
+    const certNum = `ETN-${new Date().getFullYear()}-${a.id.slice(0, 8).toUpperCase()}`;
+    const { data: prof } = await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle();
+    const { error } = await supabase.from("certificates").insert({
+      asset_id: a.id, user_id: user.id, certificate_number: certNum,
+      owner_name: prof?.full_name ?? user.email ?? "Owner",
+    });
+    if (error) toast.error(error.message); else toast.success(`Certificate ${certNum} issued`);
+  }
+
   return (
-    <AppShell breadcrumb="Content Registry">
-      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+    <AppShell title="Content Registry">
+      <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Content Registry</h1>
-          <p className="text-sm text-muted-foreground">Upload assets to generate fingerprints, pHashes and ownership certificates.</p>
+          <p className="text-sm text-muted-foreground">Upload assets to generate SHA-256 fingerprints and enable monitoring.</p>
         </div>
-        <button className="inline-flex items-center gap-2 rounded-lg px-4 h-10 text-sm font-semibold text-primary-foreground" style={{ background: "var(--gradient-violet)" }}>
-          <Upload className="h-4 w-4" /> Register new asset
+        <button onClick={() => fileRef.current?.click()} disabled={uploading} className="inline-flex h-10 items-center gap-2 rounded-lg px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" style={{ background: "var(--gradient-violet)" }}>
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Register Content
         </button>
+        <input ref={fileRef} type="file" multiple onChange={onUpload} className="hidden" />
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-4">
-        {[
-          { label: "Total assets", value: "2,847", icon: FileStack },
-          { label: "Photos", value: "1,612", icon: ImageIcon },
-          { label: "Videos & reels", value: "734", icon: Video },
-          { label: "Audio & docs", value: "501", icon: Music },
-        ].map((s) => (
-          <div key={s.label} className="surface-card p-5">
-            <s.icon className="h-5 w-5 text-primary" />
-            <div className="mt-3 font-display text-2xl font-semibold">{s.value}</div>
-            <div className="text-xs text-muted-foreground">{s.label}</div>
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        {assets.length === 0 ? (
+          <div className="py-16 text-center">
+            <FileStack className="mx-auto h-10 w-10 text-muted-foreground" />
+            <div className="mt-3 font-medium">No assets registered yet</div>
+            <p className="mt-1 text-sm text-muted-foreground">Upload images, video, audio or documents to begin protecting them.</p>
           </div>
-        ))}
-      </div>
-
-      <div className="mt-6 surface-card overflow-hidden">
-        <div className="border-b border-border px-6 py-4">
-          <h3 className="font-display text-lg font-semibold">Registered assets</h3>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/40 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-              <th className="px-6 py-3 font-semibold">Asset</th>
-              <th className="px-4 py-3 font-semibold">Type</th>
-              <th className="px-4 py-3 font-semibold">Size</th>
-              <th className="px-4 py-3 font-semibold">Fingerprint</th>
-              <th className="px-4 py-3 font-semibold">Registered</th>
-              <th className="px-6 py-3" />
-            </tr>
-          </thead>
-          <tbody>
-            {assets.map((a) => (
-              <tr key={a.name} className="border-b border-border last:border-0 hover:bg-muted/40">
-                <td className="px-6 py-3.5">
-                  <div className="flex items-center gap-3">
-                    <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent text-primary">
-                      <a.icon className="h-4 w-4" />
-                    </div>
-                    <span className="font-medium">{a.name}</span>
-                  </div>
-                </td>
-                <td className="px-4 py-3.5 text-xs"><span className="rounded-full bg-accent px-2 py-0.5 text-accent-foreground">{a.type}</span></td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground">{a.size}</td>
-                <td className="px-4 py-3.5 font-mono text-xs">{a.hash}</td>
-                <td className="px-4 py-3.5 text-xs text-muted-foreground">{a.date}</td>
-                <td className="px-6 py-3.5 text-right">
-                  <button className="rounded-md p-1.5 text-muted-foreground hover:bg-accent"><MoreHorizontal className="h-4 w-4" /></button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+              <tr><th className="text-left p-3">Title</th><th className="text-left p-3">Type</th><th className="text-left p-3">SHA-256</th><th className="text-left p-3">Status</th><th className="text-left p-3">Registered</th><th className="p-3"></th></tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {assets.map((a) => (
+                <tr key={a.id} className="hover:bg-accent/30">
+                  <td className="p-3 font-medium">{a.title}</td>
+                  <td className="p-3"><span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary capitalize">{a.asset_type}</span></td>
+                  <td className="p-3 font-mono text-xs text-muted-foreground">{a.sha256?.slice(0, 16)}…</td>
+                  <td className="p-3"><span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">● {a.status}</span></td>
+                  <td className="p-3 text-muted-foreground text-xs">{new Date(a.created_at).toLocaleDateString()}</td>
+                  <td className="p-3 text-right">
+                    <button onClick={() => issueCert(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ExternalLink className="h-3 w-3" />Issue cert</button>
+                    <button onClick={() => remove(a)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </AppShell>
   );

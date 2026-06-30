@@ -1,57 +1,70 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import { Award, ExternalLink, Trash2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { Award, Download, QrCode, ShieldCheck } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/certificates")({
-  head: () => ({ meta: [{ title: "Ownership Certificates — Eterna AI" }, { name: "description", content: "Immutable digital ownership certificates with verifiable public links." }] }),
+  head: () => ({ meta: [{ title: "Certificates — Eterna AI" }] }),
   component: Certificates,
 });
 
-const certs = [
-  { id: "ETR-CERT-00214", asset: "Editorial Portrait #214", owner: "Arjun Rao", issued: "Nov 27, 2024" },
-  { id: "ETR-CERT-00213", asset: "Brand Launch Reel", owner: "Arjun Rao", issued: "Nov 24, 2024" },
-  { id: "ETR-CERT-00212", asset: "Podcast Ep. 14 — Master", owner: "Arjun Rao", issued: "Nov 19, 2024" },
-];
-
 function Certificates() {
+  const { user } = useAuth();
+  const [rows, setRows] = useState<any[]>([]);
+
+  async function load() {
+    const { data } = await supabase.from("certificates").select("*, assets(title, asset_type, sha256)").order("issued_at", { ascending: false });
+    setRows(data ?? []);
+  }
+  useEffect(() => { if (user) load(); }, [user]);
+
+  async function remove(id: string) {
+    if (!confirm("Revoke this certificate?")) return;
+    await supabase.from("certificates").delete().eq("id", id); toast.success("Revoked"); load();
+  }
+
   return (
-    <AppShell breadcrumb="Certificates">
-      <div>
-        <h1 className="font-display text-2xl font-semibold">Digital Ownership Certificates</h1>
-        <p className="text-sm text-muted-foreground">Each registered asset gets an immutable certificate with a public verification link.</p>
+    <AppShell title="Certificates">
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-semibold">Ownership Certificates</h1>
+        <p className="text-sm text-muted-foreground">Public, verifiable proof of registration. Issue certificates from the <a className="text-primary underline" href="/registry">Registry</a>.</p>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-        {certs.map((c) => (
-          <div key={c.id} className="surface-card overflow-hidden">
-            <div className="p-5" style={{ background: "var(--gradient-subtle)" }}>
-              <div className="flex items-center justify-between">
-                <Award className="h-6 w-6 text-primary" />
-                <span className="rounded-full bg-card px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary border border-border">Verified</span>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {rows.map((c) => {
+          const verifyUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/verify/${c.certificate_number}`;
+          return (
+            <div key={c.id} className="rounded-2xl border border-border bg-card overflow-hidden">
+              <div className="p-5 text-primary-foreground" style={{ background: "var(--gradient-violet)" }}>
+                <div className="flex items-center gap-2"><Award className="h-4 w-4" /><span className="text-xs uppercase tracking-widest opacity-80">Eterna AI Certificate</span></div>
+                <div className="mt-2 font-mono text-sm">{c.certificate_number}</div>
               </div>
-              <div className="mt-6 font-mono text-xs text-muted-foreground">{c.id}</div>
-              <div className="font-display text-base font-semibold">{c.asset}</div>
-            </div>
-            <div className="grid grid-cols-3 gap-4 p-5">
-              <div className="col-span-2 space-y-2 text-xs">
-                <div><div className="text-muted-foreground">Owner</div><div className="font-medium text-foreground">{c.owner}</div></div>
-                <div><div className="text-muted-foreground">Issued</div><div className="font-medium text-foreground">{c.issued}</div></div>
-                <div className="truncate"><div className="text-muted-foreground">Verify</div><div className="font-mono text-[11px] text-primary">verify.eterna.ai/{c.id.toLowerCase()}</div></div>
+              <div className="p-5 flex gap-4">
+                <div className="rounded-lg border border-border bg-white p-2"><QRCodeSVG value={verifyUrl} size={88} /></div>
+                <div className="flex-1 min-w-0 text-sm">
+                  <div className="font-display font-semibold truncate">{c.assets?.title}</div>
+                  <div className="text-xs text-muted-foreground capitalize">{c.assets?.asset_type} · {c.owner_name}</div>
+                  <div className="mt-2 font-mono text-[10px] text-muted-foreground break-all">{c.assets?.sha256?.slice(0, 32)}…</div>
+                  <div className="mt-2 text-xs text-muted-foreground">{new Date(c.issued_at).toLocaleDateString()}</div>
+                </div>
               </div>
-              <div className="grid place-items-center rounded-lg border border-border bg-muted">
-                <QrCode className="h-12 w-12 text-foreground/70" />
+              <div className="flex justify-between border-t border-border bg-muted/30 px-4 py-2 text-xs">
+                <a href={verifyUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-primary font-medium hover:underline"><ExternalLink className="h-3 w-3" />Public verify</a>
+                <button onClick={() => remove(c.id)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
               </div>
             </div>
-            <div className="flex gap-2 border-t border-border p-3">
-              <button className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-input bg-card px-3 py-2 text-xs font-medium hover:bg-accent">
-                <Download className="h-3.5 w-3.5" /> PDF
-              </button>
-              <button className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-semibold text-primary-foreground" style={{ background: "var(--gradient-violet)" }}>
-                <ShieldCheck className="h-3.5 w-3.5" /> Verify
-              </button>
-            </div>
+          );
+        })}
+        {rows.length === 0 && (
+          <div className="md:col-span-2 xl:col-span-3 rounded-xl border border-border bg-card p-12 text-center">
+            <Award className="mx-auto h-10 w-10 text-muted-foreground" />
+            <div className="mt-3 font-medium">No certificates yet</div>
           </div>
-        ))}
+        )}
       </div>
     </AppShell>
   );
