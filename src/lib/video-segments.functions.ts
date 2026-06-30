@@ -278,7 +278,12 @@ export const scanVideoSegments = createServerFn({ method: "POST" })
 
     // Roll up — if any high-confidence segment exists, push match confidence/risk up.
     const topConf = segRows.reduce((m, s) => Math.max(m, s.confidence), 0);
-    const update: Record<string, unknown> = { segments_scanned: true };
+    const update: {
+      segments_scanned: boolean;
+      final_confidence_score?: number;
+      risk_level?: string;
+      clip_score?: number;
+    } = { segments_scanned: true };
     if (topConf > 0) {
       const newFinal = Math.max(Number(match.final_confidence_score ?? 0), topConf);
       update.final_confidence_score = newFinal;
