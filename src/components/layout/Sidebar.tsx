@@ -13,6 +13,7 @@ const primary: NavItem[] = [
   { to: "/monitoring", label: "AI Monitoring", icon: ScanSearch },
   { to: "/matching", label: "Matching Engine", icon: ScanSearch },
   { to: "/youtube", label: "YouTube Monitor", icon: Youtube },
+  { to: "/owned", label: "Official Content", icon: BadgeCheck },
   { to: "/violations", label: "Violations", icon: AlertOctagon },
   { to: "/enforcement", label: "Enforcement", icon: Gavel },
   { to: "/browser-agent", label: "AI Browser Agent", icon: Bot },
