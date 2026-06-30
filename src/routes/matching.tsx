@@ -22,6 +22,7 @@ function Matching() {
   const [selected, setSelected] = useState<string>("all");
   const [scanning, setScanning] = useState<string | null>(null);
   const scan = useServerFn(runMatchingScan);
+  const realScan = useServerFn(runRealMatchingScan);
   const escalate = useServerFn(createViolationFromMatch);
 
   async function load() {
