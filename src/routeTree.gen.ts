@@ -23,6 +23,7 @@ import { Route as CertificatesRouteImport } from './routes/certificates'
 import { Route as BrowserAgentRouteImport } from './routes/browser-agent'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AssistantRouteImport } from './routes/assistant'
+import { Route as AgentConsoleRouteImport } from './routes/agent-console'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
@@ -99,6 +100,11 @@ const AssistantRoute = AssistantRouteImport.update({
   path: '/assistant',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgentConsoleRoute = AgentConsoleRouteImport.update({
+  id: '/agent-console',
+  path: '/agent-console',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -128,6 +134,7 @@ const ApiPublicYoutubeOauthCallbackRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agent-console': typeof AgentConsoleRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agent-console': typeof AgentConsoleRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
@@ -171,6 +179,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agent-console': typeof AgentConsoleRoute
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
@@ -194,6 +203,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agent-console'
     | '/assistant'
     | '/auth'
     | '/browser-agent'
@@ -215,6 +225,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agent-console'
     | '/assistant'
     | '/auth'
     | '/browser-agent'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agent-console'
     | '/assistant'
     | '/auth'
     | '/browser-agent'
@@ -258,6 +270,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentConsoleRoute: typeof AgentConsoleRoute
   AssistantRoute: typeof AssistantRoute
   AuthRoute: typeof AuthRoute
   BrowserAgentRoute: typeof BrowserAgentRoute
@@ -378,6 +391,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssistantRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agent-console': {
+      id: '/agent-console'
+      path: '/agent-console'
+      fullPath: '/agent-console'
+      preLoaderRoute: typeof AgentConsoleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -418,6 +438,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentConsoleRoute: AgentConsoleRoute,
   AssistantRoute: AssistantRoute,
   AuthRoute: AuthRoute,
   BrowserAgentRoute: BrowserAgentRoute,
