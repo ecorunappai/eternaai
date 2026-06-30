@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ScanSearch, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, ImageOff } from "lucide-react";
+import { ScanSearch, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, ImageOff, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
@@ -8,6 +8,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
 import { runRealMatchingScan, createViolationFromMatch } from "@/lib/matching.functions";
+import { runWebScanEverywhere } from "@/lib/web-scan.functions";
+import { runYouTubeScan } from "@/lib/youtube-matching.functions";
 
 export const Route = createFileRoute("/matching")({
   head: () => ({ meta: [{ title: "Matching Engine — Eterna AI" }] }),
@@ -21,22 +23,23 @@ function Matching() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string>("all");
   const [scanning, setScanning] = useState<string | null>(null);
+  const [allScanning, setAllScanning] = useState<string | null>(null);
   const realScan = useServerFn(runRealMatchingScan);
+  const webScan = useServerFn(runWebScanEverywhere);
+  const ytScan = useServerFn(runYouTubeScan);
   const escalate = useServerFn(createViolationFromMatch);
 
   async function load() {
     const [a, m] = await Promise.all([
       supabase.from("assets").select("id,title,asset_type,phash,storage_path,file_url").order("created_at", { ascending: false }),
-      supabase.from("discovered_matches").select("*").order("final_confidence_score", { ascending: false }),
+      supabase.from("discovered_matches").select("*").order("final_confidence_score", { ascending: false }).limit(500),
     ]);
     const list = a.data ?? [];
     setAssets(list);
     setMatches((m.data ?? []).filter((match: any) => {
-      const via = String(match.discovered_via ?? "");
       const source = String(match.source_url ?? "");
-      return via === "google_lens_firecrawl_ai_verified" && !source.includes("/u/repost/");
+      return !source.includes("/u/repost/");
     }));
-    // Resolve signed URLs for thumbnails (images only)
     const map: Record<string, string> = {};
     await Promise.all(list.map(async (asset: any) => {
       if (asset.asset_type !== "image" || !asset.storage_path) return;
@@ -60,6 +63,34 @@ function Matching() {
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(null); }
   }
+
+  async function onSearchEverywhere(assetId: string) {
+    setAllScanning(assetId);
+    toast.message("Searching YouTube, Instagram, TikTok, Twitter, Reddit, Facebook, Pinterest, and the web…");
+    try {
+      const { data: prof } = await supabase.from("monitoring_profiles")
+        .select("creator_name").eq("asset_id", assetId).maybeSingle();
+      const asset = assets.find((a) => a.id === assetId);
+      const query = (prof?.creator_name ?? asset?.title ?? "").trim();
+      if (!query) {
+        toast.error("Open the asset and set a creator/brand name first (Protect button on Registry).");
+        return;
+      }
+      const [web, yt] = await Promise.allSettled([
+        webScan({ data: { assetId, query } }),
+        ytScan({ data: { assetId, query } }),
+      ]);
+      const webNew = web.status === "fulfilled" ? ((web.value as any).new_count ?? 0) : 0;
+      const webTotal = web.status === "fulfilled" ? ((web.value as any).total ?? 0) : 0;
+      const ytNew = yt.status === "fulfilled" ? ((yt.value as any).new_count ?? (yt.value as any).inserted ?? 0) : 0;
+      toast.success(`+${webNew + ytNew} new (Web ${webTotal} hits · YouTube scan complete)`);
+      if (web.status === "rejected") toast.error("Web: " + (web.reason as Error).message);
+      if (yt.status === "rejected") toast.error("YouTube: " + (yt.reason as Error).message);
+      load();
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setAllScanning(null); }
+  }
+
 
   async function onAction(matchId: string, action: "ignore" | "review" | "escalate") {
     try {
@@ -123,6 +154,14 @@ function Matching() {
                   >
                     {scanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
                     Verified Scan
+                  </button>
+                  <button
+                    disabled={allScanning === a.id}
+                    onClick={() => onSearchEverywhere(a.id)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-xs font-semibold text-foreground hover:bg-accent disabled:opacity-50"
+                  >
+                    {allScanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Globe className="h-3 w-3" />}
+                    Search Everywhere
                   </button>
                 </div>
               </div>
