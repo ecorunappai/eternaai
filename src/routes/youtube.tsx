@@ -34,7 +34,9 @@ function YouTubeDash() {
   const [query, setQuery] = useState<string>("");
   const [filter, setFilter] = useState<string>("all");
   const [scanning, setScanning] = useState(false);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const scan = useServerFn(runYouTubeScan);
+  const verifyFace = useServerFn(verifyYouTubeMatch);
   const escalate = useServerFn(createViolationFromMatch);
 
   async function load() {
