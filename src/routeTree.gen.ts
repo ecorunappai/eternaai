@@ -30,6 +30,7 @@ import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 import { Route as ApiPublicYoutubeOauthCallbackRouteImport } from './routes/api/public/youtube-oauth-callback'
+import { Route as ApiPublicHooksDispatchMonitoringRouteImport } from './routes/api/public/hooks/dispatch-monitoring'
 
 const YoutubeRoute = YoutubeRouteImport.update({
   id: '/youtube',
@@ -137,6 +138,12 @@ const ApiPublicYoutubeOauthCallbackRoute =
     path: '/api/public/youtube-oauth-callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksDispatchMonitoringRoute =
+  ApiPublicHooksDispatchMonitoringRouteImport.update({
+    id: '/api/public/hooks/dispatch-monitoring',
+    path: '/api/public/hooks/dispatch-monitoring',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -160,6 +167,7 @@ export interface FileRoutesByFullPath {
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
+  '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -183,6 +191,7 @@ export interface FileRoutesByTo {
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
+  '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -207,6 +216,7 @@ export interface FileRoutesById {
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
+  '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -232,6 +242,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
+    | '/api/public/hooks/dispatch-monitoring'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -255,6 +266,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
+    | '/api/public/hooks/dispatch-monitoring'
   id:
     | '__root__'
     | '/'
@@ -278,6 +290,7 @@ export interface FileRouteTypes {
     | '/api/search'
     | '/verify/$certId'
     | '/api/public/youtube-oauth-callback'
+    | '/api/public/hooks/dispatch-monitoring'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -302,6 +315,7 @@ export interface RootRouteChildren {
   ApiSearchRoute: typeof ApiSearchRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
   ApiPublicYoutubeOauthCallbackRoute: typeof ApiPublicYoutubeOauthCallbackRoute
+  ApiPublicHooksDispatchMonitoringRoute: typeof ApiPublicHooksDispatchMonitoringRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -453,6 +467,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicYoutubeOauthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/dispatch-monitoring': {
+      id: '/api/public/hooks/dispatch-monitoring'
+      path: '/api/public/hooks/dispatch-monitoring'
+      fullPath: '/api/public/hooks/dispatch-monitoring'
+      preLoaderRoute: typeof ApiPublicHooksDispatchMonitoringRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -478,6 +499,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSearchRoute: ApiSearchRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
   ApiPublicYoutubeOauthCallbackRoute: ApiPublicYoutubeOauthCallbackRoute,
+  ApiPublicHooksDispatchMonitoringRoute: ApiPublicHooksDispatchMonitoringRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

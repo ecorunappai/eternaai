@@ -1,16 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch } from "lucide-react";
+import { useServerFn } from "@tanstack/react-start";
+import { Upload, FileStack, Loader2, Trash2, ExternalLink, ScanSearch, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { hashImageFile, extractVideoKeyframes } from "@/lib/perceptual-hash";
+import { setupAssetMonitoring } from "@/lib/monitoring-jobs.functions";
 
 export const Route = createFileRoute("/registry")({
   head: () => ({ meta: [{ title: "Content Registry — Eterna AI" }] }),
   component: Registry,
 });
+
+const ISSUE_TYPES = [
+  "Impersonation",
+  "Content theft / reupload",
+  "Troll / harassment",
+  "Defamation",
+  "Deepfake",
+  "Trademark misuse",
+];
 
 async function sha256Hex(file: File): Promise<string> {
   const buf = await file.arrayBuffer();
