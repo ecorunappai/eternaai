@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { generateText } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { PLATFORM_PLANS } from "./takedown-autofill";
 
 export const TAKEDOWN_FORM_URLS: Record<string, string> = {
   youtube_copyright: "https://www.youtube.com/copyright_complaint_form",
@@ -222,3 +223,130 @@ export const reviewTakedown = createServerFn({ method: "POST" })
     if (error) throw error;
     return { status: patch.status ?? t.status };
   });
+
+// ============= 3. Build Playwright script + bookmarklet (no auto-submit) =============
+export const buildAutofillArtifacts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ takedownId: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: t } = await supabase.from("takedown_cases").select("*").eq("id", data.takedownId).maybeSingle();
+    if (!t || t.user_id !== userId) throw new Error("Takedown not found");
+
+    const plan = PLATFORM_PLANS[t.takedown_type];
+    if (!plan) throw new Error(`No autofill plan for ${t.takedown_type}`);
+
+    const fields = (t.form_fields ?? {}) as Record<string, string>;
+
+    // ---- Email (mailto) artifacts for DMCA / hosting abuse ----
+    if (t.takedown_type === "website_dmca" || t.takedown_type === "hosting_abuse") {
+      const subject = `DMCA / Copyright Takedown Notice — ${fields.copyright_owner ?? t.rights_owner_name}`;
+      const body =
+`To whom it may concern,
+
+${fields.description_of_infringement ?? t.violation_description}
+
+Infringing URL: ${t.infringing_url}
+Original work: ${fields.original_work_url ?? t.original_url ?? "(see attached registration certificate)"}
+Rights holder: ${t.rights_owner_name}
+Contact email: ${t.rights_owner_email}
+
+Sworn statement:
+${t.legal_declaration}
+
+Signed,
+${fields.signature ?? t.rights_owner_name}
+${new Date().toISOString().slice(0, 10)}`;
+      const mailto = `mailto:abuse@?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      return {
+        kind: "email" as const,
+        platform: plan.label,
+        notes: plan.notes,
+        mailto,
+        subject,
+        body,
+        bookmarklet: null,
+        script: null,
+      };
+    }
+
+    // ---- Bookmarklet (in-browser autofill, no submit) ----
+    const bookmarkletPayload = {
+      steps: plan.steps,
+      values: fields,
+      caseId: t.id,
+    };
+    const bookmarkletSrc = `(function(){try{var P=${JSON.stringify(bookmarkletPayload)};var filled=0,missed=[];function setVal(el,v){var p=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value')||Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value');p&&p.set?p.set.call(el,v):el.value=v;el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));el.dispatchEvent(new Event('blur',{bubbles:true}));}P.steps.forEach(function(s){var el=null;for(var i=0;i<s.selectors.length;i++){el=document.querySelector(s.selectors[i]);if(el)break;}if(!el){missed.push(s.valueKey||s.kind);return;}if(s.kind==='fill'||s.kind==='select'){var v=P.values[s.valueKey]||'';setVal(el,v);filled++;}else if(s.kind==='check'){el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}));filled++;}else if(s.kind==='click'){el.click();filled++;}});var box=document.createElement('div');box.style.cssText='position:fixed;top:16px;right:16px;z-index:2147483647;background:#5b21b6;color:#fff;padding:14px 18px;border-radius:10px;font:13px/1.4 system-ui;box-shadow:0 10px 40px rgba(0,0,0,.25);max-width:340px';box.innerHTML='<b>Eterna AI · Autofill complete</b><br>Filled '+filled+' field(s). Missed: '+(missed.join(', ')||'none')+'.<br><br><b>Review every field, then click Submit manually.</b>';document.body.appendChild(box);setTimeout(function(){box.remove();},12000);}catch(e){alert('Eterna autofill failed: '+e.message);}})();`;
+    const bookmarklet = "javascript:" + encodeURIComponent(bookmarkletSrc);
+
+    // ---- Standalone Playwright script (operator runs locally) ----
+    const script = `// Eterna AI — Takedown autofill (DOES NOT submit)
+// Generated for case ${t.id} → ${plan.label}
+// Usage:
+//   1) npm i -D playwright && npx playwright install chromium
+//   2) node fill.mjs
+//   3) The browser stays open. Review every field. Click Submit yourself.
+import { chromium } from "playwright";
+
+const PLAN = ${JSON.stringify(plan.steps, null, 2)};
+const VALUES = ${JSON.stringify(fields, null, 2)};
+const URL = ${JSON.stringify(plan.url)};
+const NOTES = ${JSON.stringify(plan.notes)};
+
+const browser = await chromium.launch({ headless: false });
+const ctx = await browser.newContext();
+const page = await ctx.newPage();
+
+console.log("Opening", URL);
+console.log("Notes:", NOTES);
+await page.goto(URL, { waitUntil: "domcontentloaded" });
+await page.waitForTimeout(2500);
+
+let filled = 0;
+const missed = [];
+
+for (const step of PLAN) {
+  let el = null;
+  for (const sel of step.selectors) {
+    el = await page.$(sel);
+    if (el) break;
+  }
+  if (!el) { missed.push(step.valueKey ?? step.kind); continue; }
+  try {
+    if (step.kind === "fill" || step.kind === "select") {
+      const v = VALUES[step.valueKey] ?? "";
+      await el.fill(String(v));
+      filled++;
+    } else if (step.kind === "check") {
+      await el.check();
+      filled++;
+    } else if (step.kind === "click") {
+      await el.click();
+      filled++;
+    } else if (step.kind === "wait") {
+      await page.waitForTimeout(step.ms);
+    }
+  } catch (e) {
+    missed.push((step.valueKey ?? step.kind) + " (" + e.message + ")");
+  }
+}
+
+console.log("\\n✓ Autofill complete. Filled " + filled + " field(s).");
+if (missed.length) console.log("⚠ Missed:", missed.join(", "));
+console.log("\\nREVIEW EVERY FIELD. ETERNA AI WILL NEVER SUBMIT FOR YOU.");
+console.log("Browser will stay open. Press Ctrl+C when finished.");
+
+await new Promise(() => {}); // hold the browser open
+`;
+
+    return {
+      kind: "browser" as const,
+      platform: plan.label,
+      notes: plan.notes,
+      url: plan.url,
+      bookmarklet,
+      script,
+      mailto: null,
+    };
+  });
+
