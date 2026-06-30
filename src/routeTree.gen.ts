@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as YoutubeRouteImport } from './routes/youtube'
 import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegistryRouteImport } from './routes/registry'
@@ -24,6 +25,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
 
+const YoutubeRoute = YoutubeRouteImport.update({
+  id: '/youtube',
+  path: '/youtube',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ViolationsRoute = ViolationsRouteImport.update({
   id: '/violations',
   path: '/violations',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
+  '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
+  '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/violations': typeof ViolationsRoute
+  '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
   '/verify/$certId': typeof VerifyCertIdRoute
 }
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/settings'
     | '/violations'
+    | '/youtube'
     | '/api/chat'
     | '/verify/$certId'
   fileRoutesByTo: FileRoutesByTo
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/settings'
     | '/violations'
+    | '/youtube'
     | '/api/chat'
     | '/verify/$certId'
   id:
@@ -191,6 +202,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/settings'
     | '/violations'
+    | '/youtube'
     | '/api/chat'
     | '/verify/$certId'
   fileRoutesById: FileRoutesById
@@ -208,12 +220,20 @@ export interface RootRouteChildren {
   RegistryRoute: typeof RegistryRoute
   SettingsRoute: typeof SettingsRoute
   ViolationsRoute: typeof ViolationsRoute
+  YoutubeRoute: typeof YoutubeRoute
   ApiChatRoute: typeof ApiChatRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/youtube': {
+      id: '/youtube'
+      path: '/youtube'
+      fullPath: '/youtube'
+      preLoaderRoute: typeof YoutubeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/violations': {
       id: '/violations'
       path: '/violations'
@@ -328,19 +348,10 @@ const rootRouteChildren: RootRouteChildren = {
   RegistryRoute: RegistryRoute,
   SettingsRoute: SettingsRoute,
   ViolationsRoute: ViolationsRoute,
+  YoutubeRoute: YoutubeRoute,
   ApiChatRoute: ApiChatRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

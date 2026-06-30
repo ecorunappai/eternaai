@@ -178,12 +178,14 @@ export type Database = {
         Row: {
           ai_score: number | null
           asset_id: string
+          channel_name: string | null
           clip_score: number | null
           created_at: string
           dhash_score: number | null
           discovered_phash: string | null
           discovered_via: string | null
           domain: string | null
+          fair_use_flag: string | null
           final_confidence_score: number | null
           id: string
           match_type: string | null
@@ -196,16 +198,21 @@ export type Database = {
           source_url: string
           status: string | null
           user_id: string
+          video_id: string | null
+          video_title: string | null
+          violation_category: string | null
         }
         Insert: {
           ai_score?: number | null
           asset_id: string
+          channel_name?: string | null
           clip_score?: number | null
           created_at?: string
           dhash_score?: number | null
           discovered_phash?: string | null
           discovered_via?: string | null
           domain?: string | null
+          fair_use_flag?: string | null
           final_confidence_score?: number | null
           id?: string
           match_type?: string | null
@@ -218,16 +225,21 @@ export type Database = {
           source_url: string
           status?: string | null
           user_id: string
+          video_id?: string | null
+          video_title?: string | null
+          violation_category?: string | null
         }
         Update: {
           ai_score?: number | null
           asset_id?: string
+          channel_name?: string | null
           clip_score?: number | null
           created_at?: string
           dhash_score?: number | null
           discovered_phash?: string | null
           discovered_via?: string | null
           domain?: string | null
+          fair_use_flag?: string | null
           final_confidence_score?: number | null
           id?: string
           match_type?: string | null
@@ -240,6 +252,9 @@ export type Database = {
           source_url?: string
           status?: string | null
           user_id?: string
+          video_id?: string | null
+          video_title?: string | null
+          violation_category?: string | null
         }
         Relationships: [
           {
