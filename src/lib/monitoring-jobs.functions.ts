@@ -241,7 +241,7 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
 
     const enq = await enqueueViaWorker({
       type: job.worker_task_type,
-      input: { ...(job.config ?? {}), monitoringJobId: job.id },
+        input: { ...((job.config ?? {}) as Record<string, unknown>), monitoringJobId: job.id },
     });
 
     if (enq.offline) {
