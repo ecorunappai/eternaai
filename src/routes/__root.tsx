@@ -84,6 +84,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "description", content: "AI-powered platform to protect content, identity and reputation across the internet." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:title", content: "Eterna AI — Digital Protection Platform" },
+      { name: "twitter:title", content: "Eterna AI — Digital Protection Platform" },
+      { property: "og:description", content: "AI-powered platform to protect content, identity and reputation across the internet." },
+      { name: "twitter:description", content: "AI-powered platform to protect content, identity and reputation across the internet." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/aa8c6773-23e9-47fa-b01d-398c38b4f60b" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/aa8c6773-23e9-47fa-b01d-398c38b4f60b" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
