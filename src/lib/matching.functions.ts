@@ -302,9 +302,7 @@ export const createViolationFromMatch = createServerFn({ method: "POST" })
     if (error || !m) throw new Error("Match not found");
     if (m.user_id !== userId) throw new Error("Forbidden");
     const score = Number(m.final_confidence_score ?? 0);
-    if (score < 60) throw new Error("Confidence too low for enforcement");
-
-    const threat = score >= 90 ? "critical" : score >= 75 ? "high" : "medium";
+    const threat = score >= 90 ? "critical" : score >= 75 ? "high" : score >= 50 ? "medium" : "low";
     const { error: vErr, data: v } = await supabase.from("violations").insert({
       user_id: userId,
       asset_id: m.asset_id,
