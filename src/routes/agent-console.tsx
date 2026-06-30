@@ -16,6 +16,7 @@ import {
   approveAgentTask,
   cancelAgentTask,
   browserAgentStatus,
+  getAgentLiveFrame,
 } from "@/lib/browser-agent-client.functions";
 
 export const Route = createFileRoute("/agent-console")({
