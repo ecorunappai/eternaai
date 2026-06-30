@@ -1,13 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, ImageOff, Search, FileText, Scale } from "lucide-react";
+import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
-import { runYouTubeScan } from "@/lib/youtube-matching.functions";
+import { runYouTubeScan, verifyYouTubeMatch } from "@/lib/youtube-matching.functions";
 import { createViolationFromMatch } from "@/lib/matching.functions";
 
 export const Route = createFileRoute("/youtube")({
@@ -34,7 +34,9 @@ function YouTubeDash() {
   const [query, setQuery] = useState<string>("");
   const [filter, setFilter] = useState<string>("all");
   const [scanning, setScanning] = useState(false);
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const scan = useServerFn(runYouTubeScan);
+  const verifyFace = useServerFn(verifyYouTubeMatch);
   const escalate = useServerFn(createViolationFromMatch);
 
   async function load() {
@@ -60,14 +62,25 @@ function YouTubeDash() {
 
   async function onScan() {
     if (!selectedAsset) return toast.error("Select a registered face/reference image first.");
+    if (!query.trim()) return toast.error("Enter a creator / celebrity name to discover videos.");
     setScanning(true);
     try {
-      const r = await scan({ data: { assetId: selectedAsset, query: query.trim() || undefined } });
+      const r = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
       if (r.inserted === 0) toast.message((r as any).note ?? "No matches");
-      else toast.success(`${r.inserted} YouTube matches verified for "${(r as any).query}"`);
+      else toast.success(`${r.inserted} suspected videos across ${(r as any).variants ?? 0} keyword variants for "${(r as any).query}"`);
       load();
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(false); }
+  }
+
+  async function onVerifyFace(matchId: string) {
+    setVerifyingId(matchId);
+    try {
+      const r = await verifyFace({ data: { matchId } });
+      toast.success(`${r.verified ? "Face MATCH" : "No face match"} · visual ${r.visual}% · final ${r.final}%`);
+      load();
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setVerifyingId(null); }
   }
 
   async function onAction(matchId: string, action: "ignore" | "review" | "escalate") {
@@ -94,7 +107,7 @@ function YouTubeDash() {
         <div className="mb-3 flex items-center gap-2">
           <Search className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Run YouTube Scan</h2>
-          <span className="text-xs text-muted-foreground">Firecrawl + AI face/content verification · saves only ≥60% verified matches</span>
+          <span className="text-xs text-muted-foreground">Multi-keyword Firecrawl discovery · English + Malayalam/Tamil/Hindi · face verification on demand</span>
         </div>
         {assets.length === 0 ? (
           <p className="text-sm text-muted-foreground">Register a reference image (face / celebrity photo) in Content Registry first.</p>
@@ -108,7 +121,7 @@ function YouTubeDash() {
             </label>
             <label className="block">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Search query (creator / celebrity name)</div>
-              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Taylor Swift reaction" className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" />
+              <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. Ahaana Krishna" className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm" />
             </label>
             <button disabled={scanning || !selectedAsset} onClick={onScan} className="inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50" style={{ background: "var(--gradient-violet)" }}>
               {scanning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Youtube className="h-4 w-4" />}
@@ -161,6 +174,13 @@ function YouTubeDash() {
                         {m.violation_category && m.violation_category !== "unrelated" && (
                           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary capitalize">{String(m.violation_category).replace(/_/g, " ")}</span>
                         )}
+                        {(() => {
+                          const kw = /KEYWORD:([^|]+)/.exec(m.notes ?? "")?.[1]?.trim();
+                          return kw ? <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[10px] font-medium text-foreground"><Tag className="h-3 w-3" />{kw}</span> : null;
+                        })()}
+                        {Number(m.ai_score ?? 0) === 0 && (
+                          <span className="rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold">Needs Visual Review</span>
+                        )}
                         <span className="ml-auto text-xs text-muted-foreground">{new Date(m.created_at).toLocaleDateString()}</span>
                       </div>
                       <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
@@ -168,7 +188,7 @@ function YouTubeDash() {
                       <a href={m.source_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
                         <ExternalLink className="h-3 w-3" />{m.source_url}
                       </a>
-                      {m.notes && <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-2">{m.notes}</span></div>}
+                      {m.notes && <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-2">{String(m.notes).replace(/KEYWORD:[^|]+\|\s*/, "")}</span></div>}
                       <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                         <Score label="Face / Visual" v={m.clip_score} />
                         <Score label="AI Verify" v={m.ai_score} />
@@ -177,6 +197,14 @@ function YouTubeDash() {
                       </div>
                     </div>
                     <div className="flex flex-col gap-1.5 shrink-0">
+                      <button
+                        disabled={verifyingId === m.id}
+                        onClick={() => onVerifyFace(m.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                      >
+                        {verifyingId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanFace className="h-3 w-3" />}
+                        Verify Face
+                      </button>
                       <button onClick={() => onAction(m.id, "review")} className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">
                         <Eye className="h-3 w-3" /> Review
                       </button>
@@ -184,12 +212,12 @@ function YouTubeDash() {
                         <EyeOff className="h-3 w-3" /> Ignore
                       </button>
                       <button
-                        disabled={m.final_confidence_score < 60 || m.status === "escalated"}
+                        disabled={m.status === "escalated"}
                         onClick={() => onAction(m.id, "escalate")}
                         className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
                         style={{ background: "var(--gradient-violet)" }}
                       >
-                        <Gavel className="h-3 w-3" /> {m.status === "escalated" ? "In Review" : "Send to Reviewer"}
+                        <Gavel className="h-3 w-3" /> {m.status === "escalated" ? "In Review" : "Create Case"}
                       </button>
                     </div>
                   </div>
