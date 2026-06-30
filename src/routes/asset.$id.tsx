@@ -69,18 +69,43 @@ function AssetPage() {
   }
   useEffect(() => { if (user && id) load(); }, [user, id]);
 
+  // Poll active scan job
+  useEffect(() => {
+    if (!liveJob?.id) return;
+    if (liveJob.status !== "running") return;
+    const t = setInterval(async () => {
+      const { data } = await supabase.from("scan_jobs").select("*").eq("id", liveJob.id).maybeSingle();
+      if (data) {
+        setLiveJob(data);
+        setJobs((arr) => arr.map((j) => j.id === data.id ? data : j));
+        if (data.status !== "running") clearInterval(t);
+      }
+    }, 1500);
+    return () => clearInterval(t);
+  }, [liveJob?.id, liveJob?.status]);
+
   const youtubeMatches = useMemo(() => matches.filter(m => m.discovered_via === "youtube_firecrawl_ai_verified"), [matches]);
   const officialMatches = useMemo(() => youtubeMatches.filter(m => m.is_owned || m.result_category === "official"), [youtubeMatches]);
 
   async function rescan() {
     if (!profile?.creator_name) return toast.error("Set up a monitoring profile first.");
     setScanning(true);
+    setLiveJob({ id: null, status: "running", progress: 0, passes_done: 0, total_passes: 0, current_pass: "starting", candidates_found: 0, started_at: new Date().toISOString() });
+    // Resolve real job row after server creates it
+    const poller = setInterval(async () => {
+      const { data } = await supabase.from("scan_jobs").select("*").eq("asset_id", id).order("started_at", { ascending: false }).limit(1).maybeSingle();
+      if (data && data.status === "running") { setLiveJob(data); clearInterval(poller); }
+    }, 800);
     try {
       const r: any = await scanFn({ data: { assetId: id, query: profile.creator_name } });
-      await supabase.from("monitoring_profiles").update({ last_scan_at: new Date().toISOString() }).eq("id", profile.id);
+      clearInterval(poller);
       toast.success(`+${r.new_count ?? r.inserted ?? 0} new · total ${r.total ?? 0}`);
       load();
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) {
+      clearInterval(poller);
+      setLiveJob((j: any) => j ? { ...j, status: "failed", error_message: (e as Error).message } : null);
+      toast.error((e as Error).message);
+    }
     finally { setScanning(false); }
   }
 
