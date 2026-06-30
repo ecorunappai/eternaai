@@ -348,6 +348,23 @@ function AgentConsolePage() {
     finally { setBusy(null); }
   }
 
+  async function onCancelAll() {
+    const active = tasks.filter((t) => !["completed", "failed", "cancelled"].includes(t.status));
+    if (!active.length) { toast.message("No active tasks to cancel"); return; }
+    if (typeof window !== "undefined" && !window.confirm(`Cancel ${active.length} active task(s)?`)) return;
+    setBusy("cancel-all");
+    let ok = 0, fail = 0;
+    for (const t of active) {
+      try {
+        await cancel({ data: { workerTaskId: t.worker_task_id ?? t.id } });
+        ok++;
+      } catch { fail++; }
+    }
+    toast.success(`Cancelled ${ok} task(s)${fail ? `, ${fail} failed` : ""}`);
+    await refreshList();
+    setBusy(null);
+  }
+
   return (
     <AppShell title="Agent Console">
       {/* Header */}
