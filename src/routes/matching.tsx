@@ -7,7 +7,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
-import { runMatchingScan, runRealMatchingScan, createViolationFromMatch } from "@/lib/matching.functions";
+import { runRealMatchingScan, createViolationFromMatch } from "@/lib/matching.functions";
 
 export const Route = createFileRoute("/matching")({
   head: () => ({ meta: [{ title: "Matching Engine — Eterna AI" }] }),
@@ -21,7 +21,6 @@ function Matching() {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState<string>("all");
   const [scanning, setScanning] = useState<string | null>(null);
-  const scan = useServerFn(runMatchingScan);
   const realScan = useServerFn(runRealMatchingScan);
   const escalate = useServerFn(createViolationFromMatch);
 
@@ -32,7 +31,11 @@ function Matching() {
     ]);
     const list = a.data ?? [];
     setAssets(list);
-    setMatches((m.data ?? []).filter((match: any) => match.discovered_via !== "google_lens_firecrawl"));
+    setMatches((m.data ?? []).filter((match: any) => {
+      const via = String(match.discovered_via ?? "");
+      const source = String(match.source_url ?? "");
+      return via === "google_lens_firecrawl_ai_verified" && !source.includes("/u/repost/");
+    }));
     // Resolve signed URLs for thumbnails (images only)
     const map: Record<string, string> = {};
     await Promise.all(list.map(async (asset: any) => {
@@ -46,15 +49,13 @@ function Matching() {
 
   const visible = matches.filter((m) => selected === "all" || m.asset_id === selected);
 
-  async function onScan(assetId: string, mode: "real" | "demo" = "real") {
+  async function onScan(assetId: string) {
     setScanning(assetId);
     try {
-      const res = mode === "real"
-        ? await realScan({ data: { assetId } })
-        : await scan({ data: { assetId } });
+      const res = await realScan({ data: { assetId } });
       const note = (res as any).note;
       if (res.inserted === 0) toast.message(note ?? "No matches found");
-      else toast.success(`Discovered ${res.inserted} ${mode === "real" ? "live" : "demo"} matches`);
+      else toast.success(`Discovered ${res.inserted} verified real matches`);
       load();
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(null); }
@@ -116,19 +117,12 @@ function Matching() {
                 <div className="flex flex-col gap-1.5 shrink-0">
                   <button
                     disabled={a.asset_type !== "image" || scanning === a.id}
-                    onClick={() => onScan(a.id, "real")}
+                    onClick={() => onScan(a.id)}
                     className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
                     style={{ background: "var(--gradient-violet)" }}
                   >
                     {scanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
                     Verified Scan
-                  </button>
-                  <button
-                    disabled={!a.phash || scanning === a.id}
-                    onClick={() => onScan(a.id, "demo")}
-                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-3 text-[11px] font-medium hover:bg-accent disabled:opacity-50"
-                  >
-                    Demo
                   </button>
                 </div>
               </div>
