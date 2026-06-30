@@ -136,12 +136,40 @@ function YouTubeDash() {
     return matches.filter(m => !m.is_owned && (m.result_category ?? "needs_review") === tab);
   }, [matches, tab, todayStart]);
 
+  const [liveJob, setLiveJob] = useState<any>(null);
+
+  // Poll active scan_job for progress
+  useEffect(() => {
+    if (!liveJob?.id) return;
+    const status = liveJob.status;
+    if (status === "completed" || status === "completed_empty" || status === "failed") return;
+    const t = setInterval(async () => {
+      const { data } = await supabase.from("scan_jobs").select("*").eq("id", liveJob.id).maybeSingle();
+      if (data) setLiveJob(data);
+    }, 1500);
+    return () => clearInterval(t);
+  }, [liveJob?.id, liveJob?.status]);
+
   async function onScan() {
     if (!selectedAsset) return toast.error("Select a registered face/reference image first.");
     if (!query.trim()) return toast.error("Enter a creator / celebrity name to discover videos.");
     setScanning(true);
+    // Pre-create a placeholder live job for instant UI feedback; the real one updates from server returns.
+    setLiveJob({ id: null, status: "running", progress: 0, passes_done: 0, total_passes: 0, current_pass: "starting", candidates_found: 0 });
+    // Resolve the actual job row once it appears (server creates it ~immediately)
+    const poller = setInterval(async () => {
+      const { data } = await supabase.from("scan_jobs").select("*").eq("asset_id", selectedAsset).eq("kind", "youtube").order("started_at", { ascending: false }).limit(1).maybeSingle();
+      if (data && (!liveJob?.id || data.id !== liveJob?.id) && data.status === "running") {
+        setLiveJob(data); clearInterval(poller);
+      }
+    }, 800);
     try {
       const r: any = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
+      clearInterval(poller);
+      if (r.job_id) {
+        const { data } = await supabase.from("scan_jobs").select("*").eq("id", r.job_id).maybeSingle();
+        setLiveJob(data);
+      }
       if ((r.inserted ?? 0) === 0 && (r.candidates_found ?? 0) === 0) {
         toast.message(r.note ?? "No matches");
       } else {
@@ -149,7 +177,11 @@ function YouTubeDash() {
         await classifyFn({ data: { subject: query.trim() } });
       }
       load();
-    } catch (e) { toast.error((e as Error).message); }
+    } catch (e) {
+      clearInterval(poller);
+      setLiveJob((j: any) => j ? { ...j, status: "failed", error_message: (e as Error).message } : null);
+      toast.error((e as Error).message);
+    }
     finally { setScanning(false); }
   }
 
