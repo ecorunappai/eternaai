@@ -659,7 +659,7 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
       .filter(Boolean) as Array<{ id: string; patch: Record<string, any> }>;
 
     for (const repair of metadataRepairs.slice(0, 250)) {
-      await supabase.from("discovered_matches").update(repair.patch).eq("id", repair.id);
+      await supabase.from("discovered_matches").update(repair.patch as any).eq("id", repair.id);
     }
 
     const fresh = candidates.filter((c) => !existing.has(c.videoId));
