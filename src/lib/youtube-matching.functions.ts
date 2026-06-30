@@ -115,21 +115,32 @@ function collectYouTubeCandidates(html: string): Candidate[] {
       });
     }
   }
-  // Fallback: bare /watch?v= anchors in HTML when ytInitialData isn't present.
+  // Fallback: extract any youtube video IDs from arbitrary HTML
+  // (anchors, Google/DDG result links with encoded URLs, shorts URLs).
   if (out.size === 0) {
-    const anchor = /href="\/watch\?v=([A-Za-z0-9_-]{11})"[^>]*?(?:title="([^"]+)")?/g;
-    while ((m = anchor.exec(html)) !== null) {
-      const id = m[1];
-      if (out.has(id)) continue;
-      out.set(id, {
-        videoId: id,
-        url: `https://www.youtube.com/watch?v=${id}`,
-        thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-        title: m[2] ? decodeHtml(m[2]) : `YouTube video ${id}`,
-        channel: "Unknown channel",
-        isShort: false,
-        rank: rank++,
-      });
+    const patterns = [
+      /\/watch\?v=([A-Za-z0-9_-]{11})/g,
+      /youtube\.com%2Fwatch%3Fv%3D([A-Za-z0-9_-]{11})/g,
+      /youtu\.be\/([A-Za-z0-9_-]{11})/g,
+      /\/shorts\/([A-Za-z0-9_-]{11})/g,
+    ];
+    for (const re of patterns) {
+      while ((m = re.exec(html)) !== null) {
+        const id = m[1];
+        if (out.has(id)) continue;
+        const isShort = re.source.includes("shorts");
+        out.set(id, {
+          videoId: id,
+          url: isShort
+            ? `https://www.youtube.com/shorts/${id}`
+            : `https://www.youtube.com/watch?v=${id}`,
+          thumb: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+          title: `YouTube ${isShort ? "Short" : "video"} ${id}`,
+          channel: "YouTube",
+          isShort,
+          rank: rank++,
+        });
+      }
     }
   }
   return Array.from(out.values()).sort((a, b) => a.rank - b.rank);
