@@ -113,7 +113,32 @@ function profileUrlFor(platform: string, url: string): string | null {
   } catch { return null; }
 }
 
-type SearchHit = { url: string; title: string; description?: string; preview?: string | null; createdAt?: string | null };
+type SearchHit = { url: string; title: string; description?: string; preview?: string | null; createdAt?: string | null; engine?: string };
+
+// SearXNG (self-hosted) — primary discovery source. See /services/README.md.
+async function searxngSearch(baseUrl: string, bearer: string | undefined, query: string, limit = 10, timeRange: "month" | "" = "month"): Promise<SearchHit[]> {
+  try {
+    const url = new URL("/search", baseUrl.replace(/\/$/, ""));
+    url.searchParams.set("q", query);
+    url.searchParams.set("format", "json");
+    url.searchParams.set("safesearch", "0");
+    if (timeRange) url.searchParams.set("time_range", timeRange);
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (bearer) headers.Authorization = `Bearer ${bearer}`;
+    const r = await fetch(url.toString(), { headers });
+    if (!r.ok) return [];
+    const j: any = await r.json();
+    const arr: any[] = Array.isArray(j?.results) ? j.results : [];
+    return arr.slice(0, limit).map((it) => ({
+      url: it.url,
+      title: String(it.title ?? it.url),
+      description: String(it.content ?? it.snippet ?? ""),
+      preview: it.thumbnail ?? it.img_src ?? null,
+      createdAt: it.publishedDate ?? it.pubdate ?? null,
+      engine: it.engine,
+    })).filter((h) => !!h.url);
+  } catch { return []; }
+}
 
 async function firecrawlSearch(apiKey: string, query: string, limit = 10): Promise<SearchHit[]> {
   try {
@@ -143,6 +168,7 @@ async function firecrawlSearch(apiKey: string, query: string, limit = 10): Promi
     return out;
   } catch { return []; }
 }
+
 
 // Reddit-native search via public JSON endpoint. Sorted by NEW for accurate latest results,
 // with real thumbnails and post timestamps that Google Lens / site:reddit.com cannot give us.
