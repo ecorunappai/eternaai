@@ -255,7 +255,8 @@ function AgentConsolePage() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [current, setCurrent] = useState<any | null>(null);
-  const [agentOnline, setAgentOnline] = useState<{ online: boolean; configured: boolean; reason?: string } | null>(null);
+  const [agentOnline, setAgentOnline] = useState<{ online: boolean; configured: boolean; reason?: string; code?: string; latencyMs?: number } | null>(null);
+  const [testingConn, setTestingConn] = useState(false);
   const [showNew, setShowNew] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [mode, setMode] = useState<AgentMode>(() => (typeof window !== "undefined" && (localStorage.getItem(MODE_KEY) as AgentMode)) || "semi");
