@@ -833,6 +833,9 @@ export type Database = {
           violation_description: string | null
           warning_email_id: string | null
           warning_sent_at: string | null
+          youtube_report_payload: Json | null
+          youtube_report_prepared_at: string | null
+          youtube_report_status: string | null
         }
         Insert: {
           approved_at?: string | null
@@ -868,6 +871,9 @@ export type Database = {
           violation_description?: string | null
           warning_email_id?: string | null
           warning_sent_at?: string | null
+          youtube_report_payload?: Json | null
+          youtube_report_prepared_at?: string | null
+          youtube_report_status?: string | null
         }
         Update: {
           approved_at?: string | null
@@ -903,6 +909,9 @@ export type Database = {
           violation_description?: string | null
           warning_email_id?: string | null
           warning_sent_at?: string | null
+          youtube_report_payload?: Json | null
+          youtube_report_prepared_at?: string | null
+          youtube_report_status?: string | null
         }
         Relationships: [
           {
@@ -1155,6 +1164,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      youtube_connections: {
+        Row: {
+          access_token_encrypted: string | null
+          connected_at: string
+          created_at: string
+          disconnected_at: string | null
+          email: string | null
+          google_account_id: string | null
+          id: string
+          refresh_token_encrypted: string | null
+          scopes: string | null
+          status: string
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+          youtube_channel_id: string | null
+          youtube_channel_title: string | null
+        }
+        Insert: {
+          access_token_encrypted?: string | null
+          connected_at?: string
+          created_at?: string
+          disconnected_at?: string | null
+          email?: string | null
+          google_account_id?: string | null
+          id?: string
+          refresh_token_encrypted?: string | null
+          scopes?: string | null
+          status?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+          youtube_channel_id?: string | null
+          youtube_channel_title?: string | null
+        }
+        Update: {
+          access_token_encrypted?: string | null
+          connected_at?: string
+          created_at?: string
+          disconnected_at?: string | null
+          email?: string | null
+          google_account_id?: string | null
+          id?: string
+          refresh_token_encrypted?: string | null
+          scopes?: string | null
+          status?: string
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+          youtube_channel_id?: string | null
+          youtube_channel_title?: string | null
+        }
+        Relationships: []
       }
     }
     Views: {

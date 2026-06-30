@@ -26,6 +26,7 @@ import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as ApiPublicYoutubeOauthCallbackRouteImport } from './routes/api/public/youtube-oauth-callback'
 
 const YoutubeRoute = YoutubeRouteImport.update({
   id: '/youtube',
@@ -112,6 +113,12 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicYoutubeOauthCallbackRoute =
+  ApiPublicYoutubeOauthCallbackRouteImport.update({
+    id: '/api/public/youtube-oauth-callback',
+    path: '/api/public/youtube-oauth-callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -150,6 +158,7 @@ export interface FileRoutesByTo {
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -170,6 +179,7 @@ export interface FileRoutesById {
   '/youtube': typeof YoutubeRoute
   '/api/chat': typeof ApiChatRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -191,6 +201,7 @@ export interface FileRouteTypes {
     | '/youtube'
     | '/api/chat'
     | '/verify/$certId'
+    | '/api/public/youtube-oauth-callback'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -210,6 +221,7 @@ export interface FileRouteTypes {
     | '/youtube'
     | '/api/chat'
     | '/verify/$certId'
+    | '/api/public/youtube-oauth-callback'
   id:
     | '__root__'
     | '/'
@@ -229,6 +241,7 @@ export interface FileRouteTypes {
     | '/youtube'
     | '/api/chat'
     | '/verify/$certId'
+    | '/api/public/youtube-oauth-callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -249,6 +262,7 @@ export interface RootRouteChildren {
   YoutubeRoute: typeof YoutubeRoute
   ApiChatRoute: typeof ApiChatRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
+  ApiPublicYoutubeOauthCallbackRoute: typeof ApiPublicYoutubeOauthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -372,6 +386,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/youtube-oauth-callback': {
+      id: '/api/public/youtube-oauth-callback'
+      path: '/api/public/youtube-oauth-callback'
+      fullPath: '/api/public/youtube-oauth-callback'
+      preLoaderRoute: typeof ApiPublicYoutubeOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -393,6 +414,7 @@ const rootRouteChildren: RootRouteChildren = {
   YoutubeRoute: YoutubeRoute,
   ApiChatRoute: ApiChatRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
+  ApiPublicYoutubeOauthCallbackRoute: ApiPublicYoutubeOauthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
