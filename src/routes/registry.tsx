@@ -39,12 +39,19 @@ function detectType(mime: string): string {
 function Registry() {
   const { user } = useAuth();
   const [assets, setAssets] = useState<any[]>([]);
+  const [jobsByAsset, setJobsByAsset] = useState<Record<string, number>>({});
   const [uploading, setUploading] = useState(false);
+  const [enablingFor, setEnablingFor] = useState<any | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const setupFn = useServerFn(setupAssetMonitoring);
 
   async function load() {
     const { data } = await supabase.from("assets").select("*").order("created_at", { ascending: false });
     setAssets(data ?? []);
+    const { data: jobs } = await supabase.from("monitoring_jobs").select("asset_id");
+    const map: Record<string, number> = {};
+    (jobs ?? []).forEach((j: any) => { if (j.asset_id) map[j.asset_id] = (map[j.asset_id] ?? 0) + 1; });
+    setJobsByAsset(map);
   }
   useEffect(() => { if (user) load(); }, [user]);
 
