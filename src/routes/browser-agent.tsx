@@ -31,54 +31,117 @@ const STATUS_LABEL: Record<string, { label: string; tone: string }> = {
   failed: { label: "Failed", tone: "bg-destructive/10 text-destructive" },
 };
 
-function downloadEvidence(c: any, evidence: any[], contacts: any[], emails: any[]) {
-  const bundle = {
-    exported_at: new Date().toISOString(),
-    case: {
-      id: c.id,
-      subject_name: c.subject_name,
-      target_url: c.target_url,
-      platform: c.platform,
-      status: c.status,
-      page_title: c.page_title,
-      page_description: c.page_description,
-      created_at: c.created_at,
-    },
-    evidence: evidence.map((e) => ({
-      id: e.id,
-      evidence_type: e.evidence_type,
-      source_url: e.source_url,
-      content: e.content,
-      metadata: e.metadata,
-      created_at: e.created_at,
-    })),
-    contacts: contacts.map((x) => ({
-      contact_type: x.contact_type,
-      value: x.value,
-      source_label: x.source_label,
-      source_url: x.source_url,
-    })),
-    warning_emails: emails.map((e) => ({
-      status: e.status,
-      recipient_email: e.recipient_email,
-      subject: e.subject,
-      body: e.body,
-      fair_use_flag: e.fair_use_flag,
-      risk_level: e.risk_level,
-      deadline_hours: e.deadline_hours,
-      created_at: e.created_at,
-    })),
+async function downloadEvidence(c: any, evidence: any[], contacts: any[], emails: any[]) {
+  const { jsPDF } = await import("jspdf");
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 40;
+  let y = margin;
+
+  const ensure = (h: number) => {
+    if (y + h > pageH - margin) { doc.addPage(); y = margin; }
   };
+  const heading = (t: string, size = 14) => {
+    ensure(size + 12);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(size); doc.setTextColor(76, 29, 149);
+    doc.text(t, margin, y); y += size + 6;
+    doc.setTextColor(20, 20, 20);
+  };
+  const para = (t: string, size = 10) => {
+    if (!t) return;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(size);
+    const lines = doc.splitTextToSize(String(t), pageW - margin * 2);
+    for (const ln of lines) { ensure(size + 4); doc.text(ln, margin, y); y += size + 4; }
+  };
+  const kv = (k: string, v: any) => {
+    if (v === null || v === undefined || v === "") return;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    ensure(14); doc.text(`${k}:`, margin, y);
+    doc.setFont("helvetica", "normal");
+    const lines = doc.splitTextToSize(String(v), pageW - margin * 2 - 90);
+    lines.forEach((ln: string, i: number) => { if (i > 0) { y += 12; ensure(12); } doc.text(ln, margin + 90, y); });
+    y += 14;
+  };
+  const divider = () => { ensure(20); doc.setDrawColor(220); doc.line(margin, y, pageW - margin, y); y += 14; };
+
+  // Header
+  doc.setFillColor(124, 58, 237); doc.rect(0, 0, pageW, 60, "F");
+  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(18);
+  doc.text("Eterna AI — Evidence Bundle", margin, 38);
+  doc.setFontSize(9); doc.setFont("helvetica", "normal");
+  doc.text(`Exported ${new Date().toLocaleString()}`, margin, 52);
+  doc.setTextColor(20, 20, 20);
+  y = 90;
+
+  heading("Case Summary");
+  kv("Subject", c.subject_name);
+  kv("Target URL", c.target_url);
+  kv("Platform", c.platform);
+  kv("Status", c.status);
+  kv("Page Title", c.page_title);
+  kv("Page Description", c.page_description);
+  kv("Opened", c.created_at);
+  divider();
+
+  heading(`Evidence (${evidence.length})`);
+  if (!evidence.length) para("No evidence captured.");
+  for (const e of evidence) {
+    kv("Type", e.evidence_type);
+    kv("Source", e.source_url);
+    if (e.evidence_type === "screenshot" && e.metadata?.screenshot_url) {
+      try {
+        const res = await fetch(e.metadata.screenshot_url);
+        const blob = await res.blob();
+        const dataUrl: string = await new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(fr.result as string);
+          fr.onerror = reject;
+          fr.readAsDataURL(blob);
+        });
+        const imgW = pageW - margin * 2;
+        const imgH = imgW * 0.5625;
+        ensure(imgH + 10);
+        const fmt = dataUrl.includes("image/png") ? "PNG" : "JPEG";
+        doc.addImage(dataUrl, fmt, margin, y, imgW, imgH);
+        y += imgH + 10;
+      } catch { para("[screenshot unavailable]"); }
+    } else if (e.content) {
+      para(e.content.slice(0, 1800));
+    }
+    divider();
+  }
+
+  heading(`Contacts (${contacts.length})`);
+  if (!contacts.length) para("No contacts discovered.");
+  for (const x of contacts) {
+    kv(x.contact_type, `${x.value}  (source: ${x.source_label ?? ""})`);
+  }
+  divider();
+
+  heading(`Warning Emails (${emails.length})`);
+  if (!emails.length) para("No drafts generated.");
+  for (const e of emails) {
+    kv("Status", e.status);
+    kv("To", e.recipient_email);
+    kv("Risk", e.risk_level);
+    kv("Fair Use", e.fair_use_flag);
+    kv("Subject", e.subject);
+    heading("Body", 11);
+    para(e.body);
+    divider();
+  }
+
+  // Footer page numbers
+  const total = doc.getNumberOfPages();
+  for (let p = 1; p <= total; p++) {
+    doc.setPage(p);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(140);
+    doc.text(`Eterna AI · Confidential evidence · Page ${p} / ${total}`, margin, pageH - 18);
+  }
+
   const safe = (c.subject_name || "case").replace(/[^a-z0-9-_]+/gi, "_").slice(0, 40);
-  const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `eterna-evidence_${safe}_${c.id.slice(0, 8)}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  doc.save(`eterna-evidence_${safe}_${c.id.slice(0, 8)}.pdf`);
 }
 
 function BrowserAgentPage() {
@@ -266,7 +329,7 @@ function BrowserAgentPage() {
                       onClick={() => downloadEvidence(selectedCase, evidence, contacts, emails)}
                       className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] font-medium normal-case tracking-normal hover:bg-accent"
                     >
-                      <Download className="h-3 w-3" /> Download Bundle
+                      <Download className="h-3 w-3" /> Download PDF
                     </button>
                   )}
                 </div>

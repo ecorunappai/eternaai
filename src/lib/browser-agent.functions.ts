@@ -1,7 +1,7 @@
 // Eterna AI — Browser Agent + Warning Email Agent (Firecrawl-powered, human-approval gated)
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { generateText, Output } from "ai";
+import { generateText } from "ai";
 import { z } from "zod";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
 
@@ -248,34 +248,68 @@ Requirements:
 Respond with ONLY a single JSON object, no markdown, no commentary, matching exactly:
 {"subject":"...","body":"...","fair_use_flag":"clear_violation|possible_fair_use|needs_legal_review","risk_level":"low|medium|high|critical"}`;
 
-    const result = await generateText({
-      model: gateway("google/gemini-3-flash-preview"),
-      temperature: 0.3,
-      maxRetries: 2,
-      messages: [{ role: "user", content: prompt }],
-    });
+    // Deterministic fallback so the user always gets a usable email even if AI fails
+    const fallback: z.infer<typeof DraftSchema> = {
+      subject: `Urgent: Copyright / Content Misuse Notice — Removal Requested Within ${data.deadlineHours}h`,
+      body:
+`Dear ${data.recipientEmail.split("@")[0] || "Creator"},
 
-    const raw = result.text ?? "";
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const block = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-      const obj = raw.match(/\{[\s\S]*\}/);
-      const candidate = (block?.[1] ?? obj?.[0] ?? "").trim();
-      try {
-        parsed = JSON.parse(candidate);
-      } catch {
-        throw new Error("AI returned an unparseable draft. Please retry.");
-      }
-    }
-    const safe = DraftSchema.safeParse(parsed);
-    const draft = safe.success ? safe.data : {
-      subject: (parsed as any)?.subject?.toString().slice(0, 140) || `Removal request — ${c.subject_name ?? "infringing content"}`,
-      body: (parsed as any)?.body?.toString().slice(0, 4000) || raw.slice(0, 4000),
-      fair_use_flag: (["clear_violation","possible_fair_use","needs_legal_review"].includes((parsed as any)?.fair_use_flag) ? (parsed as any).fair_use_flag : "needs_legal_review") as "clear_violation"|"possible_fair_use"|"needs_legal_review",
-      risk_level: (["low","medium","high","critical"].includes((parsed as any)?.risk_level) ? (parsed as any).risk_level : "medium") as "low"|"medium"|"high"|"critical",
+We are writing on behalf of ${data.rightsOwnerName}, the verified rights owner of the original content referenced below. Eterna AI Protection Team monitors digital infringement on behalf of our client and has identified the following content as a potential unauthorized use of their copyrighted/personal material:
+
+  • Infringing URL: ${c.target_url}
+  • Page Title: ${c.page_title ?? "(captured during investigation)"}
+  • Platform: ${c.platform ?? "Online"}
+  • Subject / Channel: ${c.subject_name ?? "(see URL)"}
+
+Ownership evidence and the registered ownership certificate are available here:
+  • Ownership Certificate: [Certificate Link]
+  • Evidence Bundle: [Evidence Link]
+
+We respectfully request that you remove or restrict access to the infringing content within ${data.deadlineHours} hours of receipt of this notice. If you believe your use qualifies as fair use, commentary, news, or transformative work, please reply to this email within the same window with your justification so we may review before escalating.
+
+Failure to respond may result in a formal DMCA / platform-level takedown request and, where applicable, further legal action.
+
+This notice is sent in good faith. Nothing in this message constitutes a waiver of any rights, all of which are expressly reserved.
+
+Sincerely,
+Eterna AI Protection Team
+on behalf of ${data.rightsOwnerName}`,
+      fair_use_flag: "needs_legal_review",
+      risk_level: "medium",
     };
+
+    let draft: z.infer<typeof DraftSchema> = fallback;
+    try {
+      const result = await generateText({
+        model: gateway("google/gemini-2.5-flash"),
+        temperature: 0.3,
+        maxRetries: 2,
+        messages: [{ role: "user", content: prompt }],
+      });
+      const raw = (result.text ?? "").trim();
+      let parsed: any = null;
+      try { parsed = JSON.parse(raw); } catch {
+        const block = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+        const obj = raw.match(/\{[\s\S]*\}/);
+        const cand = (block?.[1] ?? obj?.[0] ?? "").trim()
+          .replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+        try { parsed = JSON.parse(cand); } catch { /* fall through */ }
+      }
+      if (parsed && typeof parsed === "object") {
+        const safe = DraftSchema.safeParse(parsed);
+        if (safe.success) draft = safe.data;
+        else {
+          draft = {
+            subject: (parsed.subject?.toString().slice(0, 140)) || fallback.subject,
+            body: (parsed.body?.toString().slice(0, 4000)) || fallback.body,
+            fair_use_flag: (["clear_violation","possible_fair_use","needs_legal_review"].includes(parsed.fair_use_flag) ? parsed.fair_use_flag : fallback.fair_use_flag),
+            risk_level: (["low","medium","high","critical"].includes(parsed.risk_level) ? parsed.risk_level : fallback.risk_level),
+          };
+        }
+      }
+    } catch (err) {
+      console.error("AI draft failed, using deterministic fallback:", err);
+    }
 
 
     const { data: row, error } = await supabase.from("warning_emails").insert({
