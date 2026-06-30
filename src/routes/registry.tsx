@@ -158,6 +158,11 @@ function Registry() {
                   <td className="p-3"><span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">● {a.status}</span></td>
                   <td className="p-3 text-muted-foreground text-xs">{new Date(a.created_at).toLocaleDateString()}</td>
                   <td className="p-3 text-right whitespace-nowrap">
+                    {jobsByAsset[a.id] ? (
+                      <Link to="/monitoring-jobs" className="inline-flex items-center gap-1 text-xs text-emerald-700 font-medium hover:underline mr-3"><ShieldCheck className="h-3 w-3" />{jobsByAsset[a.id]} scans active</Link>
+                    ) : (
+                      <button onClick={() => setEnablingFor(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ShieldCheck className="h-3 w-3" />Enable monitoring</button>
+                    )}
                     <Link to="/matching" className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ScanSearch className="h-3 w-3" />Scan</Link>
                     <button onClick={() => issueCert(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ExternalLink className="h-3 w-3" />Issue cert</button>
                     <button onClick={() => remove(a)} className="text-muted-foreground hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
