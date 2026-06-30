@@ -90,6 +90,21 @@ function YouTubeDash() {
     finally { setVerifyingId(null); }
   }
 
+  async function onGatherEvidence(matchId: string) {
+    setGatheringId(matchId);
+    try {
+      const { caseId } = await openCase({ data: { matchId } });
+      const inv = await investigate({ data: { caseId } });
+      const contacts = await findContacts({ data: { caseId } });
+      // fetch contact details
+      const { data: rows } = await supabase.from("creator_contacts").select("contact_type,value,source_label").eq("case_id", caseId);
+      const emails = (rows ?? []).filter(r => r.contact_type === "email").map(r => r.value);
+      const socials = (rows ?? []).filter(r => r.contact_type !== "email").map(r => ({ value: r.value, source_label: r.source_label }));
+      setEvidence(prev => ({ ...prev, [matchId]: { caseId, emails, socials, title: inv.title ?? undefined, screenshot: inv.screenshot ?? undefined } }));
+      toast.success(`Evidence saved · ${emails.length} email(s), ${socials.length} social link(s)`);
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setGatheringId(null); }
+
   async function onAction(matchId: string, action: "ignore" | "review" | "escalate") {
     try {
       if (action === "escalate") {
