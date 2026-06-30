@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag } from "lucide-react";
+import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, FileText, Scale, ScanFace, Tag, FolderSearch, Mail, AtSign } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
@@ -9,6 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
 import { runYouTubeScan, verifyYouTubeMatch } from "@/lib/youtube-matching.functions";
 import { createViolationFromMatch } from "@/lib/matching.functions";
+import { openCaseFromMatch, investigateCase, discoverContacts } from "@/lib/browser-agent.functions";
 
 export const Route = createFileRoute("/youtube")({
   head: () => ({ meta: [{ title: "YouTube Monitoring — Eterna AI" }] }),
@@ -35,9 +37,14 @@ function YouTubeDash() {
   const [filter, setFilter] = useState<string>("all");
   const [scanning, setScanning] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [gatheringId, setGatheringId] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<Record<string, { caseId: string; emails: string[]; socials: { value: string; source_label: string }[]; title?: string; screenshot?: string }>>({});
   const scan = useServerFn(runYouTubeScan);
   const verifyFace = useServerFn(verifyYouTubeMatch);
   const escalate = useServerFn(createViolationFromMatch);
+  const openCase = useServerFn(openCaseFromMatch);
+  const investigate = useServerFn(investigateCase);
+  const findContacts = useServerFn(discoverContacts);
 
   async function load() {
     const [a, m] = await Promise.all([
@@ -82,6 +89,24 @@ function YouTubeDash() {
     } catch (e) { toast.error((e as Error).message); }
     finally { setVerifyingId(null); }
   }
+
+  async function onGatherEvidence(matchId: string) {
+    setGatheringId(matchId);
+    try {
+      const { caseId } = await openCase({ data: { matchId } });
+      const inv = await investigate({ data: { caseId } });
+      const contacts = await findContacts({ data: { caseId } });
+      // fetch contact details
+      const { data: rows } = await supabase.from("creator_contacts").select("contact_type,value,source_label").eq("case_id", caseId);
+      const emails = (rows ?? []).filter(r => r.contact_type === "email").map(r => r.value);
+      const socials = (rows ?? []).filter(r => r.contact_type !== "email").map(r => ({ value: r.value, source_label: r.source_label ?? "" }));
+      setEvidence(prev => ({ ...prev, [matchId]: { caseId, emails, socials, title: inv.title ?? undefined, screenshot: inv.screenshot ?? undefined } }));
+      toast.success(`Evidence saved · ${emails.length} email(s), ${socials.length} social link(s)`);
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setGatheringId(null); }
+  }
+
+
 
   async function onAction(matchId: string, action: "ignore" | "review" | "escalate") {
     try {
@@ -195,6 +220,23 @@ function YouTubeDash() {
                         <Score label="Text Signal" v={m.metadata_score} />
                         <Score label="Final" v={m.final_confidence_score} bold />
                       </div>
+                      {evidence[m.id] && (
+                        <div className="mt-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs space-y-1.5">
+                          <div className="font-semibold text-primary flex items-center gap-1"><FolderSearch className="h-3.5 w-3.5" /> Evidence Gathered</div>
+                          {evidence[m.id].title && <div className="text-muted-foreground">Page: <span className="text-foreground">{evidence[m.id].title}</span></div>}
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">Emails ({evidence[m.id].emails.length})</div>
+                            {evidence[m.id].emails.length === 0 ? <div className="text-muted-foreground">None discovered publicly</div> :
+                              <ul className="space-y-0.5">{evidence[m.id].emails.map(e => <li key={e} className="flex items-center gap-1"><Mail className="h-3 w-3 text-primary" /><a href={`mailto:${e}`} className="text-primary hover:underline">{e}</a></li>)}</ul>}
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-1">Social / Contact links ({evidence[m.id].socials.length})</div>
+                            {evidence[m.id].socials.length === 0 ? <div className="text-muted-foreground">None discovered</div> :
+                              <ul className="space-y-0.5">{evidence[m.id].socials.slice(0, 8).map(s => <li key={s.value} className="flex items-center gap-1 truncate"><AtSign className="h-3 w-3 text-primary shrink-0" /><a href={s.value} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">{s.source_label || s.value}</a></li>)}</ul>}
+                          </div>
+                          <Link to="/browser-agent" className="inline-flex items-center gap-1 text-primary hover:underline mt-1"><ExternalLink className="h-3 w-3" /> Open in AI Browser Agent</Link>
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col gap-1.5 shrink-0">
                       <button
@@ -204,6 +246,14 @@ function YouTubeDash() {
                       >
                         {verifyingId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanFace className="h-3 w-3" />}
                         Verify Face
+                      </button>
+                      <button
+                        disabled={gatheringId === m.id}
+                        onClick={() => onGatherEvidence(m.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                      >
+                        {gatheringId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FolderSearch className="h-3 w-3" />}
+                        Gather Evidence
                       </button>
                       <button onClick={() => onAction(m.id, "review")} className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">
                         <Eye className="h-3 w-3" /> Review
