@@ -202,6 +202,41 @@ app.get("/tasks/:id/events", (req, res) => {
   req.on("close", () => { clearInterval(ping); unsub(); });
 });
 
+// Live frame endpoint — Agent Console polls this every 1 second.
+// Returns { label, ts, image (base64 PNG) } so the UI can render the
+// latest Playwright screenshot without a separate cross-origin image fetch.
+app.get("/tasks/:id/live", async (req, res) => {
+  const id = req.params.id;
+  const t = getTask(id);
+  if (!t) return res.status(404).json({ error: "not_found" });
+  const dir = path.join(EVIDENCE_DIR, id);
+  try {
+    const [png, meta] = await Promise.all([
+      fs.readFile(path.join(dir, "latest-live.png")).catch(() => null),
+      fs.readFile(path.join(dir, "latest-live.json"), "utf8").then(JSON.parse).catch(() => null),
+    ]);
+    if (!png) {
+      return res.json({
+        ready: false,
+        label: meta?.label ?? null,
+        status: t.status,
+        nextAction: t.nextAction,
+      });
+    }
+    res.json({
+      ready: true,
+      label: meta?.label ?? "Browser session",
+      ts: meta?.ts ?? Date.now(),
+      pageUrl: meta?.url ?? null,
+      status: t.status,
+      image: png.toString("base64"),
+      mime: "image/png",
+    });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`[eterna-browser-agent] listening on :${PORT} (public=${PUBLIC_BASE_URL})`);
 });

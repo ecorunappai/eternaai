@@ -292,3 +292,47 @@ export const cancelAgentTask = createServerFn({ method: "POST" })
     await persistTask(context.supabase, context.userId, res.data.task);
     return { offline: false as const, task: res.data.task };
   });
+
+// ---- Live browser frame (polled every 1s by Agent Console) ----
+// Proxies the worker's latest-live.png as a base64 data URL so the browser
+// avoids mixed-content / cross-origin issues with the agent's HTTP host.
+export const getAgentLiveFrame = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ workerTaskId: z.string() }).parse(d))
+  .handler(async ({ data }) => {
+    const { baseUrl, token, configured } = agentConfig();
+    if (!configured) return { offline: true as const, reason: "not_configured" };
+    try {
+      const res = await fetch(
+        `${baseUrl!.replace(/\/$/, "")}/tasks/${encodeURIComponent(data.workerTaskId)}/live`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+      if (!res.ok) return { offline: true as const, reason: `HTTP ${res.status}` };
+      const body = (await res.json()) as {
+        ready: boolean;
+        label?: string | null;
+        ts?: number;
+        pageUrl?: string | null;
+        status?: string;
+        image?: string;
+        mime?: string;
+      };
+      if (!body.ready || !body.image) {
+        return { offline: false as const, ready: false, label: body.label ?? null, status: body.status ?? null };
+      }
+      return {
+        offline: false as const,
+        ready: true,
+        label: body.label ?? "Browser session",
+        ts: body.ts ?? Date.now(),
+        pageUrl: body.pageUrl ?? null,
+        status: body.status ?? null,
+        dataUrl: `data:${body.mime ?? "image/png"};base64,${body.image}`,
+      };
+    } catch (e) {
+      return { offline: true as const, reason: (e as Error).message };
+    }
+  });

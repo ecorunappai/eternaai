@@ -4,7 +4,7 @@
 import type { RunCtx } from "../queue.js";
 import { appendStep, patchTask, setExtracted } from "../store.js";
 import { guardPublicPage } from "../guards.js";
-import { snapshot } from "../screenshot.js";
+import { snapshot, snapshotError } from "../screenshot.js";
 
 const NAV_TIMEOUT = 120_000;
 const SETTLE_MS = 10_000;
@@ -19,6 +19,13 @@ export async function runYouTube(ctx: RunCtx, input: any) {
   let channelUrl: string | undefined = input.channelUrl;
 
   try {
+    // 0. Frame as soon as YouTube opens, so the live view paints immediately.
+    patchTask(taskId, { status: "navigating", nextAction: "Opening YouTube" });
+    await page.goto("https://www.youtube.com/", { waitUntil: "commit", timeout: NAV_TIMEOUT }).catch(() => {});
+    await page.waitForTimeout(1500);
+    const openShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "open_youtube");
+    appendStep(taskId, { phase: "navigating", url: page.url(), note: "Opened YouTube", screenshot: openShot });
+
     // 1. Search creator if no channelUrl given
     if (!channelUrl && input.query) {
       const q = encodeURIComponent(String(input.query));
@@ -47,7 +54,14 @@ export async function runYouTube(ctx: RunCtx, input: any) {
         searchResults.push(r);
       }
       setExtracted(taskId, { searchResults });
-      appendStep(taskId, { phase: "extract", note: `Collected ${searchResults.length} search result(s)` });
+      const extractShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "extract");
+      appendStep(taskId, { phase: "extract", note: `Collected ${searchResults.length} search result(s)`, screenshot: extractShot });
+
+      // Scroll once so the live view shows real activity, then re-frame.
+      await page.mouse.wheel(0, 900).catch(() => {});
+      await page.waitForTimeout(1200);
+      const scrollShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "scroll");
+      appendStep(taskId, { phase: "extract", note: "Scrolled results", screenshot: scrollShot });
 
       // First channel link
       const firstChannel = await page.locator('a[href*="/channel/"], a[href*="/@"]').first().getAttribute("href").catch(() => null);
@@ -112,6 +126,10 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     }
 
     appendStep(taskId, { phase: "completed", note: "YouTube investigation complete" }, "completed");
+  } catch (err) {
+    // Capture an error frame so the live view shows the failure state.
+    await snapshotError(page, taskId, evidenceDir, publicBaseUrl, (err as Error).message);
+    throw err;
   } finally {
     await ctxPage.close().catch(() => {});
   }

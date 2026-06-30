@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   Bot, Loader2, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Camera, Plus,
   Search, UserSearch, Youtube, Instagram, Mail, Gavel, Eye, Copy, Ghost,
-  Brain, Activity, ShieldCheck, ListChecks, Sparkles, Zap, Hand, Cog,
+  Brain, Activity, ShieldCheck, ListChecks, Sparkles, Zap, Hand, Cog, Maximize2, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -16,6 +16,7 @@ import {
   approveAgentTask,
   cancelAgentTask,
   browserAgentStatus,
+  getAgentLiveFrame,
 } from "@/lib/browser-agent-client.functions";
 
 export const Route = createFileRoute("/agent-console")({
@@ -584,10 +585,58 @@ function LiveSession({ task, busy, onApprove, onCancel, mode }: { task: any; bus
   const steps: any[] = task.steps ?? [];
   const last = steps[steps.length - 1];
   const screenshots: string[] = task.screenshots ?? [];
-  const lastShot = screenshots[screenshots.length - 1];
+  const fallbackShot = screenshots[screenshots.length - 1] ?? null;
   const ui = uiStatus(task);
   const tone = STATUS_TONE[ui] ?? "bg-muted";
   const showApproval = task.status === "waiting_approval" || (mode !== "autonomous" && task.status === "form_prepared");
+  const workerId = task.worker_task_id ?? task.workerTaskId ?? task.id;
+
+  // ---- Live frame polling (every 1s) ----
+  const fetchLive = useServerFn(getAgentLiveFrame);
+  const [live, setLive] = useState<{ dataUrl: string | null; label: string | null; ts: number | null; offline: boolean }>({
+    dataUrl: null, label: null, ts: null, offline: false,
+  });
+  const [showFull, setShowFull] = useState(false);
+  const liveTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!workerId) return;
+    let cancelled = false;
+    const isActive = !["completed", "failed", "cancelled"].includes(task.status);
+    const tick = async () => {
+      try {
+        const r: any = await fetchLive({ data: { workerTaskId: workerId } });
+        if (cancelled) return;
+        if (r?.offline) {
+          setLive((p) => ({ ...p, offline: true, label: p.label ?? "Browser agent offline" }));
+        } else if (r?.ready && r.dataUrl) {
+          setLive({ dataUrl: r.dataUrl, label: r.label ?? "Live frame", ts: r.ts ?? Date.now(), offline: false });
+        } else {
+          setLive((p) => ({ ...p, offline: false, label: r?.label ?? p.label }));
+        }
+      } catch {
+        /* ignore transient errors */
+      }
+    };
+    tick();
+    if (isActive) liveTimer.current = window.setInterval(tick, 1000);
+    return () => {
+      cancelled = true;
+      if (liveTimer.current) { clearInterval(liveTimer.current); liveTimer.current = null; }
+    };
+  }, [workerId, task.status, fetchLive]);
+
+  const currentStepLabel =
+    live.label
+    ?? last?.note
+    ?? task.next_action
+    ?? task.nextAction
+    ?? (task.status === "completed" ? "Completed"
+        : task.status === "failed" ? "Failed"
+        : task.status === "queued" ? "Queued — waiting for browser slot"
+        : "Initializing browser session");
+
+  const liveImage = live.dataUrl ?? fallbackShot;
 
   return (
     <div className="p-4 space-y-4">
@@ -616,23 +665,49 @@ function LiveSession({ task, busy, onApprove, onCancel, mode }: { task: any; bus
         </div>
       )}
 
+      {/* Current step label (above frame) */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className={`inline-flex h-2 w-2 rounded-full shrink-0 ${live.dataUrl ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40"}`} />
+          <div className="text-xs font-semibold truncate">{currentStepLabel}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowFull(true)}
+          disabled={!liveImage}
+          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] disabled:opacity-40 hover:bg-muted/40"
+        >
+          <Maximize2 className="h-3 w-3" /> Open full live view
+        </button>
+      </div>
+
       {/* Live browser frame */}
       <div className="rounded-lg border border-border overflow-hidden">
         <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border bg-muted/30 flex items-center gap-2">
           <span className="inline-flex h-2 w-2 rounded-full bg-red-500" /><span className="inline-flex h-2 w-2 rounded-full bg-amber-500" /><span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
           <Camera className="h-3 w-3 ml-2" />
           <span>Live browser session</span>
+          {live.ts && <span className="ml-2 normal-case text-muted-foreground">· updated {Math.max(0, Math.round((Date.now() - live.ts) / 1000))}s ago</span>}
           {last?.url && (
             <a href={last.url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-primary normal-case">
               <ExternalLink className="h-2.5 w-2.5" /> open
             </a>
           )}
         </div>
-        {lastShot ? (
-          <img src={lastShot} alt="latest" className="w-full max-h-[360px] object-contain bg-black/5" />
+        {liveImage ? (
+          <img
+            src={liveImage}
+            alt={currentStepLabel}
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+            className="w-full max-h-[360px] object-contain bg-black/5"
+          />
         ) : (
           <div className="p-10 text-center text-xs text-muted-foreground">
-            {task.status === "queued" ? "Queued — waiting for a worker slot…" : "Capturing first frame…"}
+            {live.offline
+              ? "Browser agent unreachable — live view unavailable."
+              : task.status === "queued"
+                ? "Queued — waiting for a worker slot…"
+                : "Waiting for first browser frame…"}
           </div>
         )}
       </div>
@@ -640,6 +715,29 @@ function LiveSession({ task, busy, onApprove, onCancel, mode }: { task: any; bus
       {task.error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
           <AlertTriangle className="h-4 w-4 mt-0.5" /> {task.error}
+        </div>
+      )}
+
+      {/* Full live view modal */}
+      {showFull && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" onClick={() => setShowFull(false)}>
+          <div className="relative max-w-6xl w-full" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between text-white mb-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <div className="font-semibold truncate">{currentStepLabel}</div>
+                {live.ts && <span className="text-xs text-white/60">· {Math.max(0, Math.round((Date.now() - live.ts) / 1000))}s ago</span>}
+              </div>
+              <button onClick={() => setShowFull(false)} className="rounded-md p-1.5 bg-white/10 hover:bg-white/20">
+                <X className="h-4 w-4 text-white" />
+              </button>
+            </div>
+            {liveImage ? (
+              <img src={liveImage} alt={currentStepLabel} className="w-full max-h-[80vh] object-contain rounded-lg bg-black" />
+            ) : (
+              <div className="p-20 text-center text-white/70 rounded-lg bg-black/40">Waiting for first browser frame…</div>
+            )}
+          </div>
         </div>
       )}
     </div>
