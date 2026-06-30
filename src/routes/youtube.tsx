@@ -37,9 +37,14 @@ function YouTubeDash() {
   const [filter, setFilter] = useState<string>("all");
   const [scanning, setScanning] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [gatheringId, setGatheringId] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<Record<string, { caseId: string; emails: string[]; socials: { value: string; source_label: string }[]; title?: string; screenshot?: string }>>({});
   const scan = useServerFn(runYouTubeScan);
   const verifyFace = useServerFn(verifyYouTubeMatch);
   const escalate = useServerFn(createViolationFromMatch);
+  const openCase = useServerFn(openCaseFromMatch);
+  const investigate = useServerFn(investigateCase);
+  const findContacts = useServerFn(discoverContacts);
 
   async function load() {
     const [a, m] = await Promise.all([
