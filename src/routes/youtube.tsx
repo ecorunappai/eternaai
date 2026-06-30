@@ -90,20 +90,42 @@ function YouTubeDash() {
   }
   useEffect(() => { if (user) load(); }, [user]);
 
+  const todayStart = useMemo(() => { const d = new Date(); d.setHours(0,0,0,0); return d.getTime(); }, []);
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: matches.length };
+    const c: Record<string, number> = { all: matches.length, latest: matches.length };
+    let newToday = 0, historical = 0;
     for (const m of matches) {
       const cat = m.is_owned ? "official" : (m.result_category ?? "needs_review");
       c[cat] = (c[cat] ?? 0) + 1;
+      const created = new Date(m.created_at).getTime();
+      if (created >= todayStart) newToday++;
+      if (/\b20(20|21|22|23|24)\b/.test(String(m.notes ?? ""))) historical++;
     }
+    c.new_today = newToday;
+    c.historical = historical;
     return c;
-  }, [matches]);
+  }, [matches, todayStart]);
 
-  const visible = useMemo(() => matches.filter((m) => {
-    if (tab === "all") return true;
-    if (tab === "official") return m.is_owned || m.result_category === "official";
-    return !m.is_owned && (m.result_category ?? "needs_review") === tab;
-  }), [matches, tab]);
+  const stats = useMemo(() => {
+    const channels = new Set<string>();
+    let newToday = 0; let last = 0;
+    for (const m of matches) {
+      if (m.channel_name) channels.add(m.channel_name);
+      const t = new Date(m.created_at).getTime();
+      if (t >= todayStart) newToday++;
+      if (t > last) last = t;
+    }
+    return { total: matches.length, channels: channels.size, newToday, last };
+  }, [matches, todayStart]);
+
+  const visible = useMemo(() => {
+    if (tab === "all" || tab === "latest") return matches;
+    if (tab === "new_today") return matches.filter(m => new Date(m.created_at).getTime() >= todayStart);
+    if (tab === "historical") return matches.filter(m => /\b20(20|21|22|23|24)\b/.test(String(m.notes ?? "")));
+    if (tab === "official") return matches.filter(m => m.is_owned || m.result_category === "official");
+    return matches.filter(m => !m.is_owned && (m.result_category ?? "needs_review") === tab);
+  }, [matches, tab, todayStart]);
 
   async function onScan() {
     if (!selectedAsset) return toast.error("Select a registered face/reference image first.");
