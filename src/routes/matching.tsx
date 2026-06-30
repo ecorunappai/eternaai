@@ -154,11 +154,12 @@ function Matching() {
             {visible.map((m) => {
               const badge = riskBadge(m.risk_level);
               const asset = assets.find((a) => a.id === m.asset_id);
+              const thumb = m.preview_url || thumbs[m.asset_id];
               return (
                 <li key={m.id} className="p-5 hover:bg-accent/20">
                   <div className="flex items-start gap-4">
-                    {thumbs[m.asset_id] ? (
-                      <img src={thumbs[m.asset_id]} alt="match preview" className="h-20 w-20 shrink-0 rounded-lg object-cover border border-border" />
+                    {thumb ? (
+                      <img src={thumb} alt="match preview" className="h-20 w-20 shrink-0 rounded-lg object-cover border border-border" />
                     ) : (
                       <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
                         <ImageOff className="h-6 w-6" />
