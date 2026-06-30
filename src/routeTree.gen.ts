@@ -14,6 +14,7 @@ import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as TakedownRouteImport } from './routes/takedown'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegistryRouteImport } from './routes/registry'
+import { Route as MonitoringJobsRouteImport } from './routes/monitoring-jobs'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
 import { Route as MatchingRouteImport } from './routes/matching'
 import { Route as IdentityRouteImport } from './routes/identity'
@@ -53,6 +54,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const RegistryRoute = RegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MonitoringJobsRoute = MonitoringJobsRouteImport.update({
+  id: '/monitoring-jobs',
+  path: '/monitoring-jobs',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MonitoringRoute = MonitoringRouteImport.update({
@@ -144,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
   '/monitoring': typeof MonitoringRoute
+  '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
@@ -213,6 +222,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/monitoring-jobs'
     | '/registry'
     | '/settings'
     | '/takedown'
@@ -235,6 +245,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/monitoring-jobs'
     | '/registry'
     | '/settings'
     | '/takedown'
@@ -257,6 +268,7 @@ export interface FileRouteTypes {
     | '/identity'
     | '/matching'
     | '/monitoring'
+    | '/monitoring-jobs'
     | '/registry'
     | '/settings'
     | '/takedown'
@@ -280,6 +292,7 @@ export interface RootRouteChildren {
   IdentityRoute: typeof IdentityRoute
   MatchingRoute: typeof MatchingRoute
   MonitoringRoute: typeof MonitoringRoute
+  MonitoringJobsRoute: typeof MonitoringJobsRoute
   RegistryRoute: typeof RegistryRoute
   SettingsRoute: typeof SettingsRoute
   TakedownRoute: typeof TakedownRoute
@@ -326,6 +339,13 @@ declare module '@tanstack/react-router' {
       path: '/registry'
       fullPath: '/registry'
       preLoaderRoute: typeof RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/monitoring-jobs': {
+      id: '/monitoring-jobs'
+      path: '/monitoring-jobs'
+      fullPath: '/monitoring-jobs'
+      preLoaderRoute: typeof MonitoringJobsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/monitoring': {
@@ -448,6 +468,7 @@ const rootRouteChildren: RootRouteChildren = {
   IdentityRoute: IdentityRoute,
   MatchingRoute: MatchingRoute,
   MonitoringRoute: MonitoringRoute,
+  MonitoringJobsRoute: MonitoringJobsRoute,
   RegistryRoute: RegistryRoute,
   SettingsRoute: SettingsRoute,
   TakedownRoute: TakedownRoute,
