@@ -155,7 +155,7 @@ Return ONLY JSON: {"description":"...","legal_declaration":"...","risk_warnings"
       original_url: originalUrl,
       infringing_url: c.target_url,
       violation_description: description,
-      similarity_score: match?.confidence_score ?? null,
+      similarity_score: match?.final_confidence_score ?? null,
       matched_at: match?.created_at ?? null,
       evidence_urls: evidenceUrls,
       form_url: TAKEDOWN_FORM_URLS[data.takedownType],
