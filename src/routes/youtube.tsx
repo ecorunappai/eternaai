@@ -62,14 +62,25 @@ function YouTubeDash() {
 
   async function onScan() {
     if (!selectedAsset) return toast.error("Select a registered face/reference image first.");
+    if (!query.trim()) return toast.error("Enter a creator / celebrity name to discover videos.");
     setScanning(true);
     try {
-      const r = await scan({ data: { assetId: selectedAsset, query: query.trim() || undefined } });
+      const r = await scan({ data: { assetId: selectedAsset, query: query.trim() } });
       if (r.inserted === 0) toast.message((r as any).note ?? "No matches");
-      else toast.success(`${r.inserted} YouTube matches verified for "${(r as any).query}"`);
+      else toast.success(`${r.inserted} suspected videos across ${(r as any).variants ?? 0} keyword variants for "${(r as any).query}"`);
       load();
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(false); }
+  }
+
+  async function onVerifyFace(matchId: string) {
+    setVerifyingId(matchId);
+    try {
+      const r = await verifyFace({ data: { matchId } });
+      toast.success(`${r.verified ? "Face MATCH" : "No face match"} · visual ${r.visual}% · final ${r.final}%`);
+      load();
+    } catch (e) { toast.error((e as Error).message); }
+    finally { setVerifyingId(null); }
   }
 
   async function onAction(matchId: string, action: "ignore" | "review" | "escalate") {
