@@ -198,6 +198,10 @@ function Registry() {
                   <td className="p-3"><span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-medium">● {a.status}</span></td>
                   <td className="p-3 text-muted-foreground text-xs">{new Date(a.created_at).toLocaleDateString()}</td>
                   <td className="p-3 text-right whitespace-nowrap">
+                    <button onClick={() => searchEverywhere(a)} disabled={scanningId === a.id} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3 disabled:opacity-50">
+                      {scanningId === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Globe className="h-3 w-3" />}
+                      {scanningId === a.id ? "Searching…" : "Search Everywhere"}
+                    </button>
                     <button onClick={() => setSetupAsset(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ShieldCheck className="h-3 w-3" />Protect</button>
                     <Link to="/asset/$id" params={{ id: a.id }} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ScanSearch className="h-3 w-3" />Open</Link>
                     <button onClick={() => issueCert(a)} className="inline-flex items-center gap-1 text-xs text-primary font-medium hover:underline mr-3"><ExternalLink className="h-3 w-3" />Cert</button>
