@@ -296,12 +296,51 @@ function YouTubeDash() {
         </button>
       </div>
 
+      {/* Latest Activity — always at the top of the dashboard */}
+      <div className="mb-6 rounded-xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-card p-5">
+        <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
+            </span>
+            <h2 className="text-sm font-semibold">Latest Activity</h2>
+          </div>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+            latestActivity.risk === "High" ? "bg-destructive/10 text-destructive border-destructive/40"
+            : latestActivity.risk === "Medium" ? "bg-amber-500/10 text-amber-700 border-amber-500/40"
+            : "bg-emerald-500/10 text-emerald-700 border-emerald-500/40"
+          }`}>Trending Risk: {latestActivity.risk}</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <ActivityCell label="Last Scan" value={stats.last ? new Date(stats.last).toLocaleString() : "—"} />
+          <ActivityCell label="New Discoveries (24h created)" value={String(stats.newToday)} accent />
+          <ActivityCell label="Uploaded < 24h" value={String(counts.last_24h ?? 0)} accent />
+          <ActivityCell label="Top Trending Score" value={`${Math.round(latestActivity.trendingMax)} / 100`} />
+        </div>
+        {latestActivity.latestVideo && (
+          <a href={latestActivity.latestVideo.source_url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-start gap-3 rounded-lg border border-border bg-background p-3 hover:bg-accent/30">
+            <img src={latestActivity.latestVideo.preview_url} alt="" className="h-14 w-24 rounded object-cover border border-border" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Latest Video</div>
+              <div className="text-sm font-medium truncate">{latestActivity.latestVideo.video_title}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {latestActivity.latestVideo.channel_name}
+                {latestActivity.latestVideo.published_at && ` · Published ${formatRelative(latestActivity.latestVideo.published_at)}`}
+                {latestActivity.latestVideo.view_count != null && ` · ${Number(latestActivity.latestVideo.view_count).toLocaleString()} views`}
+              </div>
+            </div>
+          </a>
+        )}
+      </div>
+
       <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatCard label="Total Videos Found" value={stats.total.toLocaleString()} />
         <StatCard label="Channels Found" value={stats.channels.toLocaleString()} />
-        <StatCard label="New Today" value={stats.newToday.toLocaleString()} accent />
-        <StatCard label="Last Scan" value={stats.last ? new Date(stats.last).toLocaleString() : "—"} />
+        <StatCard label="Uploaded < 7 Days" value={(counts.last_7d ?? 0).toLocaleString()} accent />
+        <StatCard label="Historical (90d+)" value={(counts.historical ?? 0).toLocaleString()} />
       </div>
+
 
       <div className="mb-6 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center gap-2">
