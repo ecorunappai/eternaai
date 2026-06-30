@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Youtube, Loader2, ShieldAlert, Eye, EyeOff, Gavel, ExternalLink, Search, Scale, ScanFace, Tag, Film, Clock, BadgeCheck, PlayCircle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
@@ -60,6 +60,7 @@ function YouTubeDash() {
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const [segmentScanId, setSegmentScanId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const tabsBarRef = useRef<HTMLDivElement | null>(null);
 
   const scan = useServerFn(runYouTubeScan);
   const verifyFace = useServerFn(verifyYouTubeMatch);
@@ -291,12 +292,22 @@ function YouTubeDash() {
         )}
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-1.5 border-b border-border">
+      <div ref={tabsBarRef} className="mb-4 flex flex-wrap gap-1.5 border-b border-border scroll-mt-20">
         {TABS.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
+          <button
+            key={t.id}
+            onClick={() => {
+              setTab(t.id);
+              requestAnimationFrame(() => tabsBarRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+            }}
+            className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${tab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
             {t.label} <span className="ml-1 text-[10px] text-muted-foreground">({counts[t.id] ?? 0})</span>
           </button>
         ))}
+      </div>
+      <div className="mb-3 text-xs text-muted-foreground">
+        Showing <span className="font-semibold text-foreground">{visible.length.toLocaleString()}</span> result{visible.length === 1 ? "" : "s"} in <span className="font-semibold text-foreground">{TABS.find(t => t.id === tab)?.label}</span>
       </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
