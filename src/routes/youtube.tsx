@@ -195,20 +195,16 @@ function YouTubeDash() {
                         <Score label="Text Signal" v={m.metadata_score} />
                         <Score label="Final" v={m.final_confidence_score} bold />
                       </div>
-                      <div className="mt-2 text-sm font-medium line-clamp-2">{m.video_title}</div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">Channel · <span className="font-medium text-foreground">{m.channel_name}</span></div>
-                      <a href={m.source_url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                        <ExternalLink className="h-3 w-3" />{m.source_url}
-                      </a>
-                      {m.notes && <div className="mt-2 text-[11px] text-muted-foreground flex items-start gap-1"><FileText className="h-3 w-3 mt-0.5 shrink-0" /><span className="line-clamp-2">{m.notes}</span></div>}
-                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                        <Score label="Face / Visual" v={m.clip_score} />
-                        <Score label="AI Verify" v={m.ai_score} />
-                        <Score label="Text Signal" v={m.metadata_score} />
-                        <Score label="Final" v={m.final_confidence_score} bold />
-                      </div>
                     </div>
                     <div className="flex flex-col gap-1.5 shrink-0">
+                      <button
+                        disabled={verifyingId === m.id}
+                        onClick={() => onVerifyFace(m.id)}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 disabled:opacity-50"
+                      >
+                        {verifyingId === m.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanFace className="h-3 w-3" />}
+                        Verify Face
+                      </button>
                       <button onClick={() => onAction(m.id, "review")} className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent">
                         <Eye className="h-3 w-3" /> Review
                       </button>
@@ -216,12 +212,12 @@ function YouTubeDash() {
                         <EyeOff className="h-3 w-3" /> Ignore
                       </button>
                       <button
-                        disabled={m.final_confidence_score < 60 || m.status === "escalated"}
+                        disabled={m.status === "escalated"}
                         onClick={() => onAction(m.id, "escalate")}
                         className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
                         style={{ background: "var(--gradient-violet)" }}
                       >
-                        <Gavel className="h-3 w-3" /> {m.status === "escalated" ? "In Review" : "Send to Reviewer"}
+                        <Gavel className="h-3 w-3" /> {m.status === "escalated" ? "In Review" : "Create Case"}
                       </button>
                     </div>
                   </div>
