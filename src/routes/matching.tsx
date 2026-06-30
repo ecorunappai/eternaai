@@ -7,7 +7,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { riskBadge } from "@/lib/matching";
-import { runMatchingScan, createViolationFromMatch } from "@/lib/matching.functions";
+import { runMatchingScan, runRealMatchingScan, createViolationFromMatch } from "@/lib/matching.functions";
 
 export const Route = createFileRoute("/matching")({
   head: () => ({ meta: [{ title: "Matching Engine — Eterna AI" }] }),
@@ -22,6 +22,7 @@ function Matching() {
   const [selected, setSelected] = useState<string>("all");
   const [scanning, setScanning] = useState<string | null>(null);
   const scan = useServerFn(runMatchingScan);
+  const realScan = useServerFn(runRealMatchingScan);
   const escalate = useServerFn(createViolationFromMatch);
 
   async function load() {
@@ -45,11 +46,15 @@ function Matching() {
 
   const visible = matches.filter((m) => selected === "all" || m.asset_id === selected);
 
-  async function onScan(assetId: string) {
+  async function onScan(assetId: string, mode: "real" | "demo" = "real") {
     setScanning(assetId);
     try {
-      const res = await scan({ data: { assetId } });
-      toast.success(`Discovered ${res.inserted} candidate matches`);
+      const res = mode === "real"
+        ? await realScan({ data: { assetId } })
+        : await scan({ data: { assetId } });
+      const note = (res as any).note;
+      if (res.inserted === 0) toast.message(note ?? "No matches found");
+      else toast.success(`Discovered ${res.inserted} ${mode === "real" ? "live" : "demo"} matches`);
       load();
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(null); }
@@ -85,7 +90,7 @@ function Matching() {
         <div className="mb-3 flex items-center gap-2">
           <ScanSearch className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Run Reverse-Image Scan</h2>
-          <span className="text-xs text-muted-foreground">TinEye + fallback engines · simulated demo</span>
+          <span className="text-xs text-muted-foreground">Live: Google Lens via Firecrawl · returns real source URLs</span>
         </div>
         {assets.length === 0 ? (
           <p className="text-sm text-muted-foreground">Register content first to enable matching.</p>
@@ -104,24 +109,34 @@ function Matching() {
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">{a.title}</div>
                     <div className="text-[11px] font-mono text-muted-foreground truncate">
-                      {a.phash ? `pHash ${a.phash.slice(0, 12)}…` : "No fingerprint"}
+                      {a.asset_type !== "image" ? "Video — demo only" : a.phash ? `pHash ${a.phash.slice(0, 12)}…` : "No fingerprint"}
                     </div>
                   </div>
                 </div>
-                <button
-                  disabled={!a.phash || scanning === a.id}
-                  onClick={() => onScan(a.id)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                  style={{ background: "var(--gradient-violet)" }}
-                >
-                  {scanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
-                  Scan
-                </button>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <button
+                    disabled={a.asset_type !== "image" || scanning === a.id}
+                    onClick={() => onScan(a.id, "real")}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                    style={{ background: "var(--gradient-violet)" }}
+                  >
+                    {scanning === a.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <ScanSearch className="h-3 w-3" />}
+                    Live Scan
+                  </button>
+                  <button
+                    disabled={!a.phash || scanning === a.id}
+                    onClick={() => onScan(a.id, "demo")}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-3 text-[11px] font-medium hover:bg-accent disabled:opacity-50"
+                  >
+                    Demo
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
@@ -139,11 +154,12 @@ function Matching() {
             {visible.map((m) => {
               const badge = riskBadge(m.risk_level);
               const asset = assets.find((a) => a.id === m.asset_id);
+              const thumb = m.preview_url || thumbs[m.asset_id];
               return (
                 <li key={m.id} className="p-5 hover:bg-accent/20">
                   <div className="flex items-start gap-4">
-                    {thumbs[m.asset_id] ? (
-                      <img src={thumbs[m.asset_id]} alt="match preview" className="h-20 w-20 shrink-0 rounded-lg object-cover border border-border" />
+                    {thumb ? (
+                      <img src={thumb} alt="match preview" className="h-20 w-20 shrink-0 rounded-lg object-cover border border-border" />
                     ) : (
                       <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground">
                         <ImageOff className="h-6 w-6" />
