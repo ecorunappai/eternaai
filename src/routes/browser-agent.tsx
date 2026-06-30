@@ -329,7 +329,7 @@ function BrowserAgentPage() {
                       onClick={() => downloadEvidence(selectedCase, evidence, contacts, emails)}
                       className="ml-auto inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[10px] font-medium normal-case tracking-normal hover:bg-accent"
                     >
-                      <Download className="h-3 w-3" /> Download Bundle
+                      <Download className="h-3 w-3" /> Download PDF
                     </button>
                   )}
                 </div>
