@@ -28,19 +28,34 @@ const FAIR_USE_BADGE: Record<string, { label: string; className: string }> = {
 };
 
 const TABS: Array<{ id: string; label: string }> = [
-  { id: "latest", label: "Latest Videos" },
-  { id: "new_today", label: "New Discoveries" },
+  { id: "latest", label: "Latest (Newest First)" },
+  { id: "last_24h", label: "Last 24h" },
+  { id: "last_7d", label: "Last 7 Days" },
+  { id: "last_30d", label: "Last 30 Days" },
+  { id: "trending", label: "Trending Today" },
+  { id: "news", label: "Latest News" },
+  { id: "breaking_news", label: "Breaking News" },
+  { id: "troll", label: "Latest Troll" },
+  { id: "reaction", label: "Latest Reaction" },
+  { id: "expose", label: "Latest Expose" },
+  { id: "controversy", label: "Latest Controversies" },
+  { id: "viral", label: "Viral" },
+  { id: "commentary", label: "Commentary" },
+  { id: "short", label: "Latest Shorts" },
   { id: "official", label: "Official Content" },
   { id: "reupload", label: "Suspected Reupload" },
-  { id: "reaction", label: "Reaction" },
-  { id: "troll", label: "Troll" },
-  { id: "news", label: "News / Commentary" },
-  { id: "fan", label: "Fan / Edit" },
+  { id: "fan_edit", label: "Fan / Edit" },
   { id: "impersonation", label: "Impersonation" },
   { id: "needs_review", label: "Needs Review" },
-  { id: "historical", label: "Historical (2020–2024)" },
+  { id: "historical", label: "Historical Archive" },
   { id: "all", label: "All" },
 ];
+
+// Tag-driven tabs (matched against discovered_matches.content_tags[])
+const TAG_TABS = new Set([
+  "news", "breaking_news", "troll", "reaction", "expose",
+  "controversy", "viral", "commentary", "short", "fan_edit", "impersonation",
+]);
 
 function fmtTime(s: number) {
   const m = Math.floor(s / 60), sec = s % 60;
