@@ -168,6 +168,14 @@ function TakedownPage() {
                     <ul className="list-disc pl-5 mt-1">{active.missing_fields.map((m: string) => <li key={m}>{m.replace(/_/g, " ")}</li>)}</ul>
                   </div>
                 </div>
+              ) : !active.warning_sent_at ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-800 flex gap-2">
+                  <Info className="h-4 w-4 shrink-0" />
+                  <div>
+                    <div className="font-semibold">No public contact found. Warning email skipped.</div>
+                    <div className="mt-1">Platform takedown can proceed. Contact search failure is recorded as contact attempt proof.</div>
+                  </div>
+                </div>
               ) : null}
 
               <div className="grid grid-cols-2 gap-2 text-xs">
