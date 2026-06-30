@@ -28,7 +28,7 @@ export async function runContact(ctx: RunCtx, input: any) {
       visited.add(url);
       patchTask(taskId, { status: "navigating", nextAction: `Visit ${url}` });
       try {
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 25000 });
+        await page.goto(url, { waitUntil: "networkidle", timeout: 120000 });
         const guard = await guardPublicPage(page);
         if (!guard.ok) { appendStep(taskId, { phase: "guard", url, note: guard.reason }); continue; }
         const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, `site_${visited.size}`);

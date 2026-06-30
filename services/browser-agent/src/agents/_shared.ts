@@ -69,10 +69,10 @@ export function classifyLinks(links: string[]): {
   };
 }
 
-export async function safeGoto(page: Page, url: string, timeout = 25000): Promise<boolean> {
+export async function safeGoto(page: Page, url: string, timeout = 120000): Promise<boolean> {
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout });
-    await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+    await page.goto(url, { waitUntil: "networkidle", timeout });
+
     return true;
   } catch {
     return false;
