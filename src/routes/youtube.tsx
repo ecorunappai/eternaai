@@ -198,6 +198,13 @@ function YouTubeDash() {
         </button>
       </div>
 
+      <div className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="Total Videos Found" value={stats.total.toLocaleString()} />
+        <StatCard label="Channels Found" value={stats.channels.toLocaleString()} />
+        <StatCard label="New Today" value={stats.newToday.toLocaleString()} accent />
+        <StatCard label="Last Scan" value={stats.last ? new Date(stats.last).toLocaleString() : "—"} />
+      </div>
+
       <div className="mb-6 rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center gap-2">
           <Search className="h-4 w-4 text-primary" />
