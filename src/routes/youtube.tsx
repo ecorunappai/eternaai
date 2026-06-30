@@ -306,8 +306,21 @@ function YouTubeDash() {
           </button>
         ))}
       </div>
-      <div className="mb-3 text-xs text-muted-foreground">
-        Showing <span className="font-semibold text-foreground">{visible.length.toLocaleString()}</span> result{visible.length === 1 ? "" : "s"} in <span className="font-semibold text-foreground">{TABS.find(t => t.id === tab)?.label}</span>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs text-muted-foreground">
+          Showing <span className="font-semibold text-foreground">{visible.length.toLocaleString()}</span> result{visible.length === 1 ? "" : "s"} in <span className="font-semibold text-foreground">{TABS.find(t => t.id === tab)?.label}</span>
+        </div>
+        {tab === "news" && (
+          <button
+            onClick={onScan}
+            disabled={scanning || !selectedAsset || !query.trim()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
+            title="Force a fresh YouTube fetch for news / commentary"
+          >
+            {scanning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Refresh results
+          </button>
+        )}
       </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
