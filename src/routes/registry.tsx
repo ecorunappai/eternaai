@@ -173,6 +173,93 @@ function Registry() {
           </table>
         )}
       </div>
+
+      {enablingFor && (
+        <EnableMonitoringDialog
+          asset={enablingFor}
+          onClose={() => setEnablingFor(null)}
+          onSubmit={async (form) => {
+            try {
+              const res = await setupFn({ data: { ...form, assetId: enablingFor.id } });
+              toast.success(`${res.jobsCreated} monitoring scans scheduled`);
+              setEnablingFor(null);
+              load();
+            } catch (e) { toast.error((e as Error).message); }
+          }}
+        />
+      )}
     </AppShell>
+  );
+}
+
+function EnableMonitoringDialog({ asset, onClose, onSubmit }: { asset: any; onClose: () => void; onSubmit: (f: any) => Promise<void> }) {
+  const [creatorName, setCreatorName] = useState(asset.title?.replace(/\.[^.]+$/, "") ?? "");
+  const [officialYoutubeUrl, setYt] = useState("");
+  const [officialInstagramUrl, setIg] = useState("");
+  const [keywords, setKw] = useState("");
+  const [issueTypes, setIssues] = useState<string[]>(["Impersonation", "Content theft / reupload"]);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl">
+        <h2 className="font-display text-lg font-semibold">Enable Auto-Monitoring</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Creates daily YouTube/Instagram/Google scans and a weekly content-misuse sweep. The browser agent runs one task at a time.</p>
+
+        <div className="mt-4 space-y-3">
+          <div>
+            <label className="text-xs font-medium">Person / Brand name *</label>
+            <input value={creatorName} onChange={(e) => setCreatorName(e.target.value)} className="mt-1 w-full h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium">Official YouTube</label>
+              <input value={officialYoutubeUrl} onChange={(e) => setYt(e.target.value)} placeholder="https://youtube.com/@…" className="mt-1 w-full h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs font-medium">Official Instagram</label>
+              <input value={officialInstagramUrl} onChange={(e) => setIg(e.target.value)} placeholder="https://instagram.com/…" className="mt-1 w-full h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium">Keywords (comma-separated)</label>
+            <input value={keywords} onChange={(e) => setKw(e.target.value)} placeholder="brand, tagline, signature phrase" className="mt-1 w-full h-9 rounded-lg border border-border bg-background px-3 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs font-medium">Issue types to monitor</label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {ISSUE_TYPES.map((t) => {
+                const on = issueTypes.includes(t);
+                return (
+                  <button key={t} type="button" onClick={() => setIssues(on ? issueTypes.filter(x => x !== t) : [...issueTypes, t])} className={`rounded-full px-3 py-1 text-xs border ${on ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>{t}</button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="h-9 rounded-lg border border-border px-3 text-sm">Cancel</button>
+          <button
+            disabled={saving || !creatorName}
+            onClick={async () => {
+              setSaving(true);
+              await onSubmit({
+                creatorName,
+                officialYoutubeUrl: officialYoutubeUrl || undefined,
+                officialInstagramUrl: officialInstagramUrl || undefined,
+                keywords: keywords.split(",").map(s => s.trim()).filter(Boolean),
+                issueTypes,
+              });
+              setSaving(false);
+            }}
+            className="inline-flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+            style={{ background: "var(--gradient-violet)" }}
+          >
+            {saving && <Loader2 className="h-3 w-3 animate-spin" />} Enable monitoring
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
