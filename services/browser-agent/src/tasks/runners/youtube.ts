@@ -126,6 +126,10 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     }
 
     appendStep(taskId, { phase: "completed", note: "YouTube investigation complete" }, "completed");
+  } catch (err) {
+    // Capture an error frame so the live view shows the failure state.
+    await snapshotError(page, taskId, evidenceDir, publicBaseUrl, (err as Error).message);
+    throw err;
   } finally {
     await ctxPage.close().catch(() => {});
   }
