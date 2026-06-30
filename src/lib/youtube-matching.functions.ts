@@ -242,35 +242,32 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     const ddg = (q: string) => `https://duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
 
     // Pass 1-3: per-keyword × relevance/date/views (covers latest + old + popular).
-    const KEYWORD_CAP = 18;
+    const KEYWORD_CAP = 8;
     for (const q of keywordQueries.slice(0, KEYWORD_CAP)) {
       for (const mode of SORT_MODES) {
         plan.push({ url: ytSearch(q, mode.sp), matchedKeyword: q, pass: `yt_${mode.label}` });
       }
     }
     // Pass 4: shorts-only filter on the base subject + top intent keywords.
-    for (const q of [subject, `${subject} troll`, `${subject} reaction`, `${subject} viral`]) {
+    for (const q of [subject, `${subject} troll`, `${subject} reaction`]) {
       plan.push({ url: ytSearch(q, SHORTS_ONLY_SP), matchedKeyword: q, pass: "yt_shorts" });
     }
     // Pass 5: channels search.
     plan.push({ url: `https://www.youtube.com/results?search_query=${encodeURIComponent(subject)}&sp=EgIQAg%253D%253D`, matchedKeyword: subject, pass: "yt_channels" });
-    // Pass 6: playlists search.
-    plan.push({ url: `https://www.youtube.com/results?search_query=${encodeURIComponent(subject)}&sp=EgIQAw%253D%253D`, matchedKeyword: subject, pass: "yt_playlists" });
-    // Pass 7-11: Google site:youtube.com keyword searches.
-    for (const suf of GOOGLE_SUFFIXES) {
+    // Pass 6: Google site:youtube.com keyword searches (trimmed).
+    for (const suf of ["", "reaction", "troll", "controversy", "news"]) {
       const q = suf ? `site:youtube.com "${subject}" ${suf}` : `site:youtube.com "${subject}"`;
       plan.push({ url: google(q), matchedKeyword: `google:${suf || "base"}`, pass: "google_site" });
     }
-    // Pass 12: regional language Google searches.
-    for (const suf of ["malayalam", "tamil", "hindi", "ട്രോൾ", "வைரல்", "वायरल"]) {
+    // Pass 7: regional language Google searches.
+    for (const suf of ["malayalam", "tamil", "hindi"]) {
       plan.push({ url: google(`site:youtube.com "${subject}" ${suf}`), matchedKeyword: `google:${suf}`, pass: "google_regional" });
     }
-    // Pass 13: year-by-year historical discovery (each on YouTube + DuckDuckGo fallback).
+    // Pass 8: year-by-year historical discovery on YouTube date-sorted.
     for (const year of YEAR_SUFFIXES) {
       plan.push({ url: ytSearch(`${subject} ${year}`, SORT_MODES[1].sp), matchedKeyword: `${subject} ${year}`, pass: "yt_year" });
-      plan.push({ url: ddg(`site:youtube.com "${subject}" ${year}`), matchedKeyword: `ddg:${year}`, pass: "ddg_year" });
     }
-    // Pass 14: mobile YouTube relevance — different layout often surfaces extras.
+    // Pass 9: mobile YouTube relevance — different layout often surfaces extras.
     plan.push({ url: mYtSearch(subject, ""), matchedKeyword: subject, pass: "myt" });
 
     // ---------- Execute plan with bounded concurrency, no early break ----------
