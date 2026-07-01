@@ -174,6 +174,80 @@ function platformFromHost(host: string): string {
   return host.replace(/^www\./, "").split(".")[0].replace(/^./, (c) => c.toUpperCase());
 }
 
+async function runKeywordPlatformScan(
+  supabase: any,
+  userId: string,
+  asset: any,
+): Promise<{ inserted: number; hits: number }> {
+  if (!process.env.BRIGHTDATA_API_TOKEN) return { inserted: 0, hits: 0 };
+  const { brightdataGoogleSearch } = await import("./brightdata.functions");
+
+  const query = [asset.title, asset.description].filter(Boolean).join(" ").trim();
+  if (!query || query.length < 3) return { inserted: 0, hits: 0 };
+
+  const platforms: Array<{ site: string; label: string }> = [
+    { site: "youtube.com", label: "YouTube" },
+    { site: "instagram.com", label: "Instagram" },
+    { site: "tiktok.com", label: "TikTok" },
+    { site: "x.com", label: "Twitter/X" },
+    { site: "facebook.com", label: "Facebook" },
+    { site: "reddit.com", label: "Reddit" },
+  ];
+
+  const rows: any[] = [];
+  const seen = new Set<string>();
+  await Promise.all(platforms.map(async (p) => {
+    try {
+      const results = await brightdataGoogleSearch(query, { limit: 8, site: p.site });
+      for (const r of results) {
+        if (!r.url || seen.has(r.url)) continue;
+        seen.add(r.url);
+        let host = "";
+        try { host = new URL(r.url).hostname.toLowerCase(); } catch { continue; }
+        rows.push({
+          user_id: userId,
+          asset_id: asset.id,
+          source_url: r.url,
+          preview_url: r.thumbnail ?? null,
+          platform: p.label,
+          domain: host,
+          discovered_via: "brightdata_keyword",
+          match_type: "keyword",
+          phash_score: 0,
+          dhash_score: 0,
+          clip_score: 0,
+          ai_score: 60,
+          final_confidence_score: 60,
+          risk_level: "medium",
+          notes: r.snippet?.slice(0, 240) ?? r.title?.slice(0, 240) ?? "",
+          status: "pending_review",
+        });
+      }
+    } catch (e) {
+      console.warn(`Keyword scan failed for ${p.site}`, (e as Error).message);
+    }
+  }));
+
+  if (rows.length === 0) return { inserted: 0, hits: 0 };
+
+  // De-dupe against existing matches for this asset.
+  const { data: existing } = await supabase
+    .from("discovered_matches")
+    .select("source_url")
+    .eq("asset_id", asset.id);
+  const existingUrls = new Set((existing ?? []).map((e: any) => e.source_url));
+  const fresh = rows.filter((r) => !existingUrls.has(r.source_url));
+  if (fresh.length === 0) return { inserted: 0, hits: rows.length };
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("discovered_matches").insert(fresh).select("id");
+  if (insErr) {
+    console.warn("Keyword match insert failed", insErr.message);
+    return { inserted: 0, hits: rows.length };
+  }
+  return { inserted: inserted?.length ?? 0, hits: rows.length };
+}
+
 export const runRealMatchingScan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => RealScanInput.parse(d))
@@ -182,145 +256,132 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
     const { data: asset, error } = await supabase.from("assets").select("*").eq("id", data.assetId).maybeSingle();
     if (error || !asset) throw new Error("Asset not found");
     if (asset.user_id !== userId) throw new Error("Forbidden");
-    if (asset.asset_type !== "image") throw new Error("Reverse image search only supports images.");
-    if (!asset.storage_path) throw new Error("Asset has no stored file.");
+    if (!asset.storage_path && asset.asset_type === "image") throw new Error("Asset has no stored file.");
+
+    // Parallel: keyword-based multi-platform discovery (YouTube/IG/TikTok/X/FB/Reddit).
+    const keywordScan = runKeywordPlatformScan(supabase, userId, asset).catch((e) => {
+      console.warn("Keyword scan error", (e as Error).message);
+      return { inserted: 0, hits: 0 };
+    });
+
+    // Image-only: reverse image search path below.
+    if (asset.asset_type !== "image") {
+      const kw = await keywordScan;
+      return {
+        inserted: kw.inserted,
+        matches: [],
+        via: "keyword",
+        note: kw.inserted > 0
+          ? `Found ${kw.inserted} keyword match${kw.inserted === 1 ? "" : "es"} across YouTube, Instagram, TikTok, X, Facebook, Reddit.`
+          : "No keyword matches surfaced on public platforms.",
+      };
+    }
 
     // Long-lived signed URL so the Browser Agent (and each search provider it opens) can fetch the image.
     const { data: signed, error: sErr } = await supabase.storage
-      .from("assets").createSignedUrl(asset.storage_path, 60 * 60 * 24 * 7);
+      .from("assets").createSignedUrl(asset.storage_path!, 60 * 60 * 24 * 7);
     if (sErr || !signed?.signedUrl) throw new Error("Could not sign asset URL");
 
-    // Preferred path: Bright Data SERP API (Google Lens uploadbyurl) — synchronous.
-    if (process.env.BRIGHTDATA_API_TOKEN) {
-      try {
-        const { brightdataRunLensReverse } = await import("./brightdata-lens.server");
-        const candidates = await brightdataRunLensReverse(signed.signedUrl);
-        if (candidates.length === 0) {
-          return { inserted: 0, matches: [], note: "Bright Data Google Lens returned no candidates." };
-        }
 
-        // Verify top 10 candidates with Gemini (visual comparison).
-        const verified: Array<{ c: Candidate; v: z.infer<typeof VerificationSchema> }> = [];
-        for (const c of candidates.slice(0, 10)) {
-          try {
-            const v = await verifyWithAi(signed.signedUrl, c.thumb ?? c.url, c.host);
-            if (v.same_content && v.confidence >= 55) verified.push({ c, v });
-          } catch { /* skip failed verification */ }
-        }
+    const reverseImage = await (async () => {
+      // Preferred path: Bright Data SERP API (Google Lens uploadbyurl) — synchronous.
+      if (process.env.BRIGHTDATA_API_TOKEN) {
+        try {
+          const { brightdataRunLensReverse } = await import("./brightdata-lens.server");
+          const candidates = await brightdataRunLensReverse(signed.signedUrl);
+          if (candidates.length === 0) {
+            return { inserted: 0, note: "Bright Data Google Lens returned no reverse-image candidates." };
+          }
 
-        if (verified.length === 0) {
+          const verified: Array<{ c: Candidate; v: z.infer<typeof VerificationSchema> }> = [];
+          for (const c of candidates.slice(0, 10)) {
+            try {
+              const v = await verifyWithAi(signed.signedUrl, c.thumb ?? c.url, c.host);
+              if (v.same_content && v.confidence >= 55) verified.push({ c, v });
+            } catch { /* skip failed verification */ }
+          }
+
+          if (verified.length === 0) {
+            return { inserted: 0, note: `Bright Data found ${candidates.length} lookalikes but none matched under AI visual verification.` };
+          }
+
+          const rows = verified.map(({ c, v }) => ({
+            user_id: userId,
+            asset_id: asset.id,
+            source_url: c.url,
+            preview_url: c.thumb,
+            platform: platformFromHost(c.host),
+            domain: c.host,
+            discovered_via: "brightdata_lens",
+            match_type: "reverse_image",
+            phash_score: 0,
+            dhash_score: 0,
+            clip_score: Math.round(v.confidence),
+            ai_score: Math.round(v.confidence),
+            final_confidence_score: Math.round(v.confidence),
+            risk_level: v.confidence >= 90 ? "critical" : v.confidence >= 75 ? "high" : "medium",
+            notes: v.reason || v.transformation,
+            status: "pending_review",
+          }));
+          const { error: insErr, data: inserted } = await supabase
+            .from("discovered_matches").insert(rows).select("id");
+          if (insErr) throw insErr;
+
           return {
-            inserted: 0,
-            matches: [],
-            note: `Bright Data found ${candidates.length} lookalikes but none matched under AI visual verification.`,
+            inserted: inserted?.length ?? 0,
+            note: `Bright Data + AI verification found ${verified.length} reverse-image match${verified.length === 1 ? "" : "es"}.`,
           };
+        } catch (e) {
+          console.warn("Bright Data Lens dispatch failed", (e as Error).message);
         }
+      }
 
-        const rows = verified.map(({ c, v }) => ({
-          user_id: userId,
-          asset_id: asset.id,
-          source_url: c.url,
-          preview_url: c.thumb,
-          platform: platformFromHost(c.host),
-          domain: c.host,
-          discovered_via: "brightdata_lens",
-          match_type: "reverse_image",
-          phash_score: 0,
-          dhash_score: 0,
-          clip_score: Math.round(v.confidence),
-          ai_score: Math.round(v.confidence),
-          final_confidence_score: Math.round(v.confidence),
-          risk_level: v.confidence >= 90 ? "critical" : v.confidence >= 75 ? "high" : "medium",
-          notes: v.reason || v.transformation,
-          status: "pending_review",
-        }));
-        const { error: insErr, data: inserted } = await supabase
-          .from("discovered_matches").insert(rows).select("id");
-        if (insErr) throw insErr;
-
-        return {
-          inserted: inserted?.length ?? 0,
-          matches: verified.map(({ c, v }) => ({ url: c.url, host: c.host, confidence: v.confidence })),
-          via: "brightdata",
-          note: `Bright Data + AI verification found ${verified.length} match${verified.length === 1 ? "" : "es"}.`,
-        };
+      // Fallback: Browser Agent (asynchronous — writes matches when task completes).
+      const baseUrl = process.env.BROWSER_AGENT_URL;
+      const token = process.env.BROWSER_AGENT_TOKEN ?? "";
+      if (!baseUrl) {
+        return { inserted: 0, note: "Reverse image search offline (no Bright Data or Browser Agent)." };
+      }
+      try {
+        const res = await fetch(`${baseUrl.replace(/\/$/, "")}/tasks`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+          body: JSON.stringify({
+            type: "image.reverse",
+            input: {
+              imageUrl: signed.signedUrl,
+              assetId: asset.id,
+              assetName: asset.title ?? "",
+              providers: ["google_lens", "bing_visual", "yandex_images"],
+            },
+          }),
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!res.ok) {
+          return { inserted: 0, note: `Reverse image agent HTTP ${res.status}.` };
+        }
+        const body = (await res.json()) as { task: { id: string } };
+        await supabase.from("agent_tasks").upsert(
+          { user_id: userId, worker_task_id: body.task.id, type: "image.reverse", status: "queued", input: { assetId: asset.id, imageUrl: signed.signedUrl } },
+          { onConflict: "user_id,worker_task_id" },
+        );
+        return { inserted: 0, note: `Reverse image scan queued (task ${body.task.id}).` };
       } catch (e) {
-        console.warn("Bright Data Lens dispatch failed", (e as Error).message);
-        // fall through to Browser Agent
+        return { inserted: 0, note: `Reverse image error: ${(e as Error).message}` };
       }
-    }
+    })();
 
-    // Fallback: Browser Agent (asynchronous — writes matches when task completes).
-    const baseUrl = process.env.BROWSER_AGENT_URL;
-    const token = process.env.BROWSER_AGENT_TOKEN ?? "";
-    if (!baseUrl) {
-      return {
-        inserted: 0,
-        matches: [],
-        fallback: true,
-        note: "Reverse image search is offline: neither Bright Data nor the Browser Agent is configured.",
-      };
-    }
-
-
-    try {
-      const res = await fetch(`${baseUrl.replace(/\/$/, "")}/tasks`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          type: "image.reverse",
-          input: {
-            imageUrl: signed.signedUrl,
-            assetId: asset.id,
-            assetName: asset.title ?? "",
-            providers: ["google_lens", "bing_visual", "yandex_images"],
-          },
-        }),
-        signal: AbortSignal.timeout(20_000),
-      });
-
-      if (!res.ok) {
-        const detail = await res.text().catch(() => "");
-        console.warn(`Browser Agent dispatch failed (${res.status}): ${detail.slice(0, 200)}`);
-        return {
-          inserted: 0,
-          matches: [],
-          fallback: true,
-          note: `Reverse image search is temporarily unavailable (agent HTTP ${res.status}). It will retry automatically on the next scheduled scan.`,
-        };
-      }
-
-      const body = (await res.json()) as { task: { id: string } };
-      await supabase.from("agent_tasks").upsert(
-        {
-          user_id: userId,
-          worker_task_id: body.task.id,
-          type: "image.reverse",
-          status: "queued",
-          input: { assetId: asset.id, imageUrl: signed.signedUrl },
-        },
-        { onConflict: "user_id,worker_task_id" },
-      );
-
-      return {
-        inserted: 0,
-        matches: [],
-        queued: true,
-        taskId: body.task.id,
-        note: "Reverse image scan queued on the Browser Agent (Google Lens → Bing Visual → Yandex). Results appear in Violations when analysis completes.",
-      };
-    } catch (e) {
-      console.warn("Browser Agent dispatch error", (e as Error).message);
-      return {
-        inserted: 0,
-        matches: [],
-        fallback: true,
-        note: `Reverse image search is temporarily unavailable (${(e as Error).message}). It will retry on the next scheduled scan.`,
-      };
-    }
+    const kw = await keywordScan;
+    const totalInserted = reverseImage.inserted + kw.inserted;
+    const kwNote = kw.inserted > 0
+      ? `${kw.inserted} keyword match${kw.inserted === 1 ? "" : "es"} across YouTube/IG/TikTok/X/Facebook/Reddit.`
+      : (kw.hits > 0 ? `${kw.hits} platform hits already tracked.` : "No new keyword matches.");
+    return {
+      inserted: totalInserted,
+      matches: [],
+      via: "brightdata",
+      note: `${reverseImage.note} ${kwNote}`.trim(),
+    };
   });
 
 
