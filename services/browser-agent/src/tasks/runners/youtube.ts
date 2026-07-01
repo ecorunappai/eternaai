@@ -93,6 +93,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
       patchTask(taskId, { status: "navigating", nextAction: "Open channel" });
       await page.goto(channelUrl, { waitUntil: "commit", timeout: NAV_TIMEOUT });
       await page.waitForTimeout(SETTLE_MS);
+      if (await handleConsent(page, channelUrl)) await page.waitForTimeout(3000);
       const guard = await guardPublicPage(page);
       if (!guard.ok) throw new Error(guard.reason);
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "channel");
