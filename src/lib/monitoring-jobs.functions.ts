@@ -285,16 +285,17 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
     );
 
     const next = nextRunFor(job.frequency);
-    await supabase
-      .from("monitoring_jobs")
-      .update({
-        last_run_at: new Date().toISOString(),
-        last_worker_task_id: enq.task.id,
-        run_count: (job.run_count ?? 0) + 1,
-        next_run_at: next ? next.toISOString() : null,
-        status: next ? job.status : "completed",
-      })
-      .eq("id", job.id);
+    const updatePayload: Record<string, unknown> = {
+      last_run_at: new Date().toISOString(),
+      last_worker_task_id: enq.task.id,
+      run_count: (job.run_count ?? 0) + 1,
+    };
+    if (next) {
+      updatePayload.next_run_at = next.toISOString();
+    } else {
+      updatePayload.status = "completed";
+    }
+    await supabase.from("monitoring_jobs").update(updatePayload).eq("id", job.id);
 
     return { offline: false, taskId: enq.task.id, queued: (activeCount ?? 0) > 0 };
   });
