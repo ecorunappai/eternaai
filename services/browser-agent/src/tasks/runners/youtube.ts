@@ -4,6 +4,7 @@
 import type { RunCtx } from "../queue.js";
 import { appendStep, patchTask, setExtracted } from "../store.js";
 import { guardPublicPage } from "../guards.js";
+import { handleConsent } from "../consent.js";
 import { snapshot, snapshotError } from "../screenshot.js";
 
 const NAV_TIMEOUT = 120_000;
@@ -23,6 +24,9 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     patchTask(taskId, { status: "navigating", nextAction: "Opening YouTube" });
     await page.goto("https://www.youtube.com/", { waitUntil: "commit", timeout: NAV_TIMEOUT }).catch(() => {});
     await page.waitForTimeout(1500);
+    if (await handleConsent(page, "https://www.youtube.com/")) {
+      appendStep(taskId, { phase: "navigating", url: page.url(), note: "Accepted YouTube cookie consent" });
+    }
     const openShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "open_youtube");
     appendStep(taskId, { phase: "navigating", url: page.url(), note: "Opened YouTube", screenshot: openShot });
 
@@ -30,11 +34,13 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     if (!channelUrl && input.query) {
       const q = encodeURIComponent(String(input.query));
       patchTask(taskId, { status: "navigating", nextAction: `Search: ${input.query}` });
-      await page.goto(`https://www.youtube.com/results?search_query=${q}`, {
-        waitUntil: "commit",
-        timeout: NAV_TIMEOUT,
-      });
+      const searchUrl = `https://www.youtube.com/results?search_query=${q}`;
+      await page.goto(searchUrl, { waitUntil: "commit", timeout: NAV_TIMEOUT });
       await page.waitForTimeout(SETTLE_MS);
+      if (await handleConsent(page, searchUrl)) {
+        appendStep(taskId, { phase: "navigating", url: page.url(), note: "Accepted YouTube cookie consent" });
+        await page.waitForTimeout(3000);
+      }
       const guard = await guardPublicPage(page);
       if (!guard.ok) throw new Error(guard.reason);
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "search_results");
@@ -74,6 +80,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
       patchTask(taskId, { status: "navigating", nextAction: `Open video: ${v.title || v.url}` });
       await page.goto(v.url, { waitUntil: "commit", timeout: NAV_TIMEOUT });
       await page.waitForTimeout(SETTLE_MS);
+      if (await handleConsent(page, v.url)) await page.waitForTimeout(3000);
       const guard = await guardPublicPage(page);
       if (!guard.ok) { appendStep(taskId, { phase: "guard", url: page.url(), note: guard.reason }); continue; }
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, `video_${videosSeen.length + 1}`);
@@ -86,6 +93,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
       patchTask(taskId, { status: "navigating", nextAction: "Open channel" });
       await page.goto(channelUrl, { waitUntil: "commit", timeout: NAV_TIMEOUT });
       await page.waitForTimeout(SETTLE_MS);
+      if (await handleConsent(page, channelUrl)) await page.waitForTimeout(3000);
       const guard = await guardPublicPage(page);
       if (!guard.ok) throw new Error(guard.reason);
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "channel");
@@ -96,6 +104,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
       patchTask(taskId, { status: "extracting", nextAction: "Open About page" });
       await page.goto(aboutUrl, { waitUntil: "commit", timeout: NAV_TIMEOUT });
       await page.waitForTimeout(SETTLE_MS);
+      if (await handleConsent(page, aboutUrl)) await page.waitForTimeout(2000);
       const aboutShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "about");
       appendStep(taskId, { phase: "extracting", url: aboutUrl, note: "About page captured", screenshot: aboutShot });
 
