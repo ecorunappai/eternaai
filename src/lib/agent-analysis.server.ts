@@ -139,7 +139,8 @@ export async function analyzeCompletedAgentTask(
   const { data: inserted, error } = await supabase
     .from("discovered_matches")
     .insert(rows)
-    .select("id, source_url, risk_level, result_category");
+    .select("id, source_url, platform, risk_level, result_category");
+
   if (error) {
     console.warn("insert discovered_matches", error.message);
     return { classified: 0, reason: error.message };
