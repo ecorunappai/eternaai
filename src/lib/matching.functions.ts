@@ -190,7 +190,67 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
       .from("assets").createSignedUrl(asset.storage_path, 60 * 60 * 24 * 7);
     if (sErr || !signed?.signedUrl) throw new Error("Could not sign asset URL");
 
-    // Browser Agent is the primary (and only) engine. Firecrawl is intentionally not used.
+    // Preferred path: Bright Data SERP API (Google Lens uploadbyurl) — synchronous.
+    if (process.env.BRIGHTDATA_API_TOKEN) {
+      try {
+        const { brightdataRunLensReverse } = await import("./brightdata-lens.server");
+        const candidates = await brightdataRunLensReverse(signed.signedUrl);
+        if (candidates.length === 0) {
+          return { inserted: 0, matches: [], note: "Bright Data Google Lens returned no candidates." };
+        }
+
+        // Verify top 10 candidates with Gemini (visual comparison).
+        const verified: Array<{ c: Candidate; v: z.infer<typeof VerificationSchema> }> = [];
+        for (const c of candidates.slice(0, 10)) {
+          try {
+            const v = await verifyWithAi(signed.signedUrl, c.thumb ?? c.url, c.host);
+            if (v.same_content && v.confidence >= 55) verified.push({ c, v });
+          } catch { /* skip failed verification */ }
+        }
+
+        if (verified.length === 0) {
+          return {
+            inserted: 0,
+            matches: [],
+            note: `Bright Data found ${candidates.length} lookalikes but none matched under AI visual verification.`,
+          };
+        }
+
+        const rows = verified.map(({ c, v }) => ({
+          user_id: userId,
+          asset_id: asset.id,
+          source_url: c.url,
+          preview_url: c.thumb,
+          platform: platformFromHost(c.host),
+          domain: c.host,
+          discovered_via: "brightdata_lens",
+          match_type: "reverse_image",
+          phash_score: 0,
+          dhash_score: 0,
+          clip_score: Math.round(v.confidence),
+          ai_score: Math.round(v.confidence),
+          final_confidence_score: Math.round(v.confidence),
+          risk_level: v.confidence >= 90 ? "critical" : v.confidence >= 75 ? "high" : "medium",
+          notes: v.reason || v.transformation,
+          status: "pending_review",
+        }));
+        const { error: insErr, data: inserted } = await supabase
+          .from("discovered_matches").insert(rows).select("id");
+        if (insErr) throw insErr;
+
+        return {
+          inserted: inserted?.length ?? 0,
+          matches: verified.map(({ c, v }) => ({ url: c.url, host: c.host, confidence: v.confidence })),
+          via: "brightdata",
+          note: `Bright Data + AI verification found ${verified.length} match${verified.length === 1 ? "" : "es"}.`,
+        };
+      } catch (e) {
+        console.warn("Bright Data Lens dispatch failed", (e as Error).message);
+        // fall through to Browser Agent
+      }
+    }
+
+    // Fallback: Browser Agent (asynchronous — writes matches when task completes).
     const baseUrl = process.env.BROWSER_AGENT_URL;
     const token = process.env.BROWSER_AGENT_TOKEN ?? "";
     if (!baseUrl) {
@@ -198,9 +258,10 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
         inserted: 0,
         matches: [],
         fallback: true,
-        note: "Reverse image search is offline: the Browser Agent is not configured. Ask an admin to set BROWSER_AGENT_URL.",
+        note: "Reverse image search is offline: neither Bright Data nor the Browser Agent is configured.",
       };
     }
+
 
     try {
       const res = await fetch(`${baseUrl.replace(/\/$/, "")}/tasks`, {
