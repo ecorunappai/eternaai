@@ -365,13 +365,22 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
 
     const built = await buildJobInput(supabase, job);
     if ("error" in built && typeof built.error === "string") {
-      return { offline: true, reason: built.error, queued: (activeCount ?? 0) > 0 };
+      return { offline: false, invalid: true, reason: built.error, missingField: "asset", queued: (activeCount ?? 0) > 0 };
     }
-    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: built as Record<string, unknown> });
+    const payload = built as Record<string, unknown>;
 
+    // Pre-flight validation — surfaces missing fields as invalid, not offline.
+    const check = validateWorkerPayload(job.worker_task_type, job.scan_type, payload);
+    if (!check.ok) {
+      return { offline: false, invalid: true, reason: check.reason, missingField: check.missingField, queued: (activeCount ?? 0) > 0 };
+    }
 
+    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: payload });
 
-    if (enq.offline) {
+    if (!enq.ok && enq.kind === "invalid") {
+      return { offline: false, invalid: true, reason: enq.reason, status: enq.status, queued: (activeCount ?? 0) > 0 };
+    }
+    if (!enq.ok) {
       return { offline: true, reason: enq.reason, queued: (activeCount ?? 0) > 0 };
     }
 
