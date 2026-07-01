@@ -450,12 +450,11 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
       const job = jobs[0];
       const built = await buildJobInput(supabaseAdmin, job);
       if ("error" in built && typeof (built as any).error === "string") continue;
-      const enq = await enqueueViaWorker({
-        type: job.worker_task_type,
-        input: built as Record<string, unknown>,
-      });
-
-      if (enq.offline) continue;
+      const payload = built as Record<string, unknown>;
+      const check = validateWorkerPayload(job.worker_task_type, job.scan_type, payload);
+      if (!check.ok) continue;
+      const enq = await enqueueViaWorker({ type: job.worker_task_type, input: payload });
+      if (!enq.ok) continue;
       await supabaseAdmin.from("agent_tasks").upsert(
         {
           user_id: userId,
