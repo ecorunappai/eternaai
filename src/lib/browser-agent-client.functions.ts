@@ -198,7 +198,7 @@ const TASK_TYPES = [
 
 
 async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
-  { offline: true; reason: string } | { offline: false; data: T }
+  { offline: true; reason: string; status?: number } | { offline: false; data: T }
 > {
   const { baseUrl, token, configured } = agentConfig();
   if (!configured) return { offline: true, reason: "BROWSER_AGENT_URL not configured" };
@@ -212,7 +212,16 @@ async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
       },
       signal: AbortSignal.timeout(20000),
     });
-    if (!res.ok) return { offline: true, reason: `Agent HTTP ${res.status}` };
+    if (!res.ok) {
+      // Surface the exact worker error body — a 400 means invalid payload,
+      // not that the agent is offline.
+      const raw = await res.text().catch(() => "");
+      let detail = raw.slice(0, 300);
+      try { const j = JSON.parse(raw); detail = j.error ?? j.message ?? detail; } catch { /* keep raw */ }
+      return { offline: true, status: res.status, reason: res.status >= 400 && res.status < 500
+        ? `Invalid task payload (HTTP ${res.status}): ${detail}`
+        : `Agent HTTP ${res.status}: ${detail}` };
+    }
     return { offline: false, data: (await res.json()) as T };
   } catch (e) {
     return { offline: true, reason: (e as Error).message };
