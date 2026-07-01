@@ -363,3 +363,97 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
 
     return { dispatched };
   });
+
+// ---------------------------------------------------------------
+// AI Risk Analyzer — reads an agent_task's extracted hits/evidence
+// and creates classified `discovered_matches` rows with risk score,
+// category, and suggested action. Uses Lovable AI Gateway.
+// ---------------------------------------------------------------
+export const analyzeAgentTaskResults = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      workerTaskId: z.string().min(1),
+      assetId: z.string().uuid().optional(),
+      assetName: z.string().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: row } = await supabase
+      .from("agent_tasks")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("worker_task_id", data.workerTaskId)
+      .maybeSingle();
+    if (!row) throw new Error("Task not found");
+
+    const extracted = (row.extracted ?? {}) as Record<string, any>;
+    const hits: any[] = Array.isArray(extracted.evidence) && extracted.evidence.length
+      ? extracted.evidence
+      : Array.isArray(extracted.hits) ? extracted.hits : [];
+    if (!hits.length) return { classified: 0 };
+
+    const apiKey = process.env.LOVABLE_API_KEY;
+    let ai: any[] = hits.map((h) => ({ ...h, risk_score: 40, category: "monitor", action: "monitor" }));
+
+    if (apiKey) {
+      try {
+        const prompt = `You are a brand-protection analyst. For each result, classify:
+- category: one of impersonation, copyright_copy, reputation_attack, fake_account, reaction_video, defamatory, brand_misuse, benign
+- risk_score: 0-100 integer
+- action: monitor | warning_email | takedown
+Return strict JSON: {"results":[{"url":"...","category":"...","risk_score":0,"action":"..."}]}
+Target: ${data.assetName ?? ""}
+Results:
+${JSON.stringify(hits.map((h) => ({ url: h.url, title: h.title, snippet: h.snippet, platform: h.platform, query: h.query })).slice(0, 25))}`;
+
+        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+          }),
+          signal: AbortSignal.timeout(45_000),
+        });
+        if (r.ok) {
+          const json = await r.json();
+          const parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "{}");
+          const results: any[] = Array.isArray(parsed.results) ? parsed.results : [];
+          ai = hits.map((h) => {
+            const m = results.find((x) => x.url === h.url);
+            return {
+              ...h,
+              category: m?.category ?? "monitor",
+              risk_score: Math.max(0, Math.min(100, Number(m?.risk_score ?? 40))),
+              action: m?.action ?? "monitor",
+            };
+          });
+        }
+      } catch (e) {
+        console.warn("AI classification failed", (e as Error).message);
+      }
+    }
+
+    const rows = ai.map((h) => ({
+      user_id: userId,
+      asset_id: data.assetId ?? null,
+      source_url: h.url,
+      title: (h.title ?? "").slice(0, 500),
+      platform: h.platform ?? "web",
+      thumbnail_url: h.screenshot ?? null,
+      snippet: (h.snippet ?? "").slice(0, 1000),
+      match_reason: h.reason ?? h.query ?? "monitoring",
+      category: h.category,
+      risk_score: h.risk_score,
+      suggested_action: h.action,
+      status: "pending",
+      discovered_at: new Date().toISOString(),
+    }));
+
+    const { error } = await supabase.from("discovered_matches").insert(rows);
+    if (error) console.warn("insert discovered_matches", error.message);
+    return { classified: rows.length };
+  });
