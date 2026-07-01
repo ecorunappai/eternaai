@@ -34,11 +34,13 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     if (!channelUrl && input.query) {
       const q = encodeURIComponent(String(input.query));
       patchTask(taskId, { status: "navigating", nextAction: `Search: ${input.query}` });
-      await page.goto(`https://www.youtube.com/results?search_query=${q}`, {
-        waitUntil: "commit",
-        timeout: NAV_TIMEOUT,
-      });
+      const searchUrl = `https://www.youtube.com/results?search_query=${q}`;
+      await page.goto(searchUrl, { waitUntil: "commit", timeout: NAV_TIMEOUT });
       await page.waitForTimeout(SETTLE_MS);
+      if (await handleConsent(page, searchUrl)) {
+        appendStep(taskId, { phase: "navigating", url: page.url(), note: "Accepted YouTube cookie consent" });
+        await page.waitForTimeout(3000);
+      }
       const guard = await guardPublicPage(page);
       if (!guard.ok) throw new Error(guard.reason);
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "search_results");
