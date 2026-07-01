@@ -110,7 +110,24 @@ function TakedownPage() {
     setAgentFrame(null);
     setAgentTask(null);
     setManagerModal(false);
+
+    // Immediately open the official YouTube copyright form in a new tab
+    // so the user always sees a popup, even if the Browser Agent is offline.
+    const formUrl =
+      active.youtube_report_payload?.form_url ||
+      active.form_url ||
+      "https://www.youtube.com/copyright_complaint_form";
     try {
+      const win = (window.top ?? window).open(formUrl, "_blank", "noopener,noreferrer");
+      if (!win) {
+        toast.error("Popup blocked — allow popups for this site to open the YouTube form.");
+      }
+    } catch {
+      window.open(formUrl, "_blank", "noopener,noreferrer");
+    }
+
+    try {
+
       const r: any = await enqueueAgent({
         data: {
           type: "takedown.prepare",
