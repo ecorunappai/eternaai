@@ -388,10 +388,13 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
         .in("status", ["queued", "running", "browsing", "navigating", "extracting", "analyzing"]);
       if ((count ?? 0) > 0) continue; // honor 1-active limit
       const job = jobs[0];
+      const built = await buildJobInput(supabaseAdmin, job);
+      if ("error" in built && typeof (built as any).error === "string") continue;
       const enq = await enqueueViaWorker({
         type: job.worker_task_type,
-        input: { ...((job.config ?? {}) as Record<string, unknown>), monitoringJobId: job.id },
+        input: built as Record<string, unknown>,
       });
+
       if (enq.offline) continue;
       await supabaseAdmin.from("agent_tasks").upsert(
         {
