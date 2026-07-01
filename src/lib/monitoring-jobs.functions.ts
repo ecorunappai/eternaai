@@ -270,6 +270,28 @@ async function enqueueViaWorker(input: {
   }
 }
 
+// Build the runner input for a job, signing a fresh image URL for image.reverse tasks.
+async function buildJobInput(
+  supabase: any,
+  job: any,
+): Promise<Record<string, unknown> | { error: string }> {
+  const base = { ...((job.config ?? {}) as Record<string, unknown>), monitoringJobId: job.id };
+  if (job.worker_task_type !== "image.reverse") return base;
+  if (!job.asset_id) return { error: "image.reverse job missing asset_id" };
+  const { data: asset } = await supabase
+    .from("assets")
+    .select("id,storage_path,title,asset_type")
+    .eq("id", job.asset_id)
+    .maybeSingle();
+  if (!asset?.storage_path) return { error: "asset has no storage_path" };
+  const { data: signed } = await supabase.storage
+    .from("assets")
+    .createSignedUrl(asset.storage_path, 60 * 60 * 24);
+  if (!signed?.signedUrl) return { error: "could not sign asset URL" };
+  return { ...base, imageUrl: signed.signedUrl, assetId: asset.id, assetName: asset.title ?? "" };
+}
+
+
 export const runMonitoringJobNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
