@@ -32,9 +32,8 @@ function Matching() {
     const list = a.data ?? [];
     setAssets(list);
     setMatches((m.data ?? []).filter((match: any) => {
-      const via = String(match.discovered_via ?? "");
       const source = String(match.source_url ?? "");
-      return via === "google_lens_firecrawl_ai_verified" && !source.includes("/u/repost/");
+      return !source.includes("/u/repost/");
     }));
     // Resolve signed URLs for thumbnails (images only)
     const map: Record<string, string> = {};
