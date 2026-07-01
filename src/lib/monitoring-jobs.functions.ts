@@ -7,95 +7,88 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
-// Every scan uses the Browser Agent's `web.search` runner (Google SERP →
-// per-platform evidence capture). Firecrawl is no longer part of monitoring.
-const PLATFORMS_ALL = ["youtube", "instagram", "tiktok", "facebook", "reddit", "twitter", "news", "web"];
-
-function baseQueries(name: string, username?: string, keywords: string[] = []): string[] {
-  const q: string[] = [];
-  if (name) {
-    q.push(`"${name}"`);
-    for (const s of ["fake", "troll", "reaction", "leaked", "scam", "impersonation", "reupload", "expose"]) {
-      q.push(`"${name}" ${s}`);
-    }
-    q.push(`site:youtube.com "${name}"`);
-    q.push(`site:reddit.com "${name}"`);
-    q.push(`site:tiktok.com "${name}"`);
-  }
-  if (username) {
-    q.push(`"${username}"`);
-    q.push(`site:instagram.com ${username}`);
-    q.push(`site:tiktok.com ${username}`);
-    q.push(`site:facebook.com ${username}`);
-  }
-  for (const k of keywords.slice(0, 5)) if (name) q.push(`"${name}" ${k}`);
-  return Array.from(new Set(q));
-}
-
-const SCAN_TEMPLATES = [
-  {
-    scan_type: "quick_scan",
-    worker_task_type: "web.search",
-    frequency: "daily",
-    label: "Quick scan — daily multi-platform sweep",
-    buildInput: (p: ProtectionProfile) => ({
-      name: p.creatorName,
-      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
-      keywords: p.keywords,
-      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords).slice(0, 8),
-      platforms: PLATFORMS_ALL,
-      openLimit: 5,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "deep_scan",
-    worker_task_type: "web.search",
-    frequency: "weekly",
-    label: "Deep scan — full keyword matrix",
-    buildInput: (p: ProtectionProfile) => ({
-      name: p.creatorName,
-      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
-      keywords: p.keywords,
-      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords),
-      platforms: PLATFORMS_ALL,
-      openLimit: 12,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "urgent_scan",
-    worker_task_type: "web.search",
-    frequency: "once",
-    label: "Urgent scan — newly registered content",
-    buildInput: (p: ProtectionProfile) => ({
-      name: p.creatorName,
-      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
-      keywords: p.keywords,
-      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords).slice(0, 6),
-      platforms: PLATFORMS_ALL,
-      openLimit: 6,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
+// Browser Agent only accepts these task types. General "web scan" work is
+// split into separate youtube.investigate + instagram.investigate +
+// contact.discover jobs rather than a single web.search task.
+const ALLOWED_WORKER_TYPES = [
+  "youtube.investigate",
+  "instagram.investigate",
+  "contact.discover",
+  "email.prepare",
+  "takedown.prepare",
+  "image.reverse",
 ] as const;
 
-// Reverse-image template — only attached when we have an actual image asset.
-// The `imageUrl` is signed at dispatch time from asset.storage_path (below).
-const IMAGE_REVERSE_TEMPLATE = {
+type BuiltJob = {
+  scan_type: string;
+  worker_task_type: (typeof ALLOWED_WORKER_TYPES)[number];
+  frequency: "daily" | "weekly" | "once";
+  input: Record<string, unknown>;
+};
+
+function buildScanJobs(p: ProtectionProfile): BuiltJob[] {
+  const jobs: BuiltJob[] = [];
+  const igUser = usernameFromUrl(p.officialInstagramUrl);
+  const ytUser = usernameFromUrl(p.officialYoutubeUrl);
+
+  if (p.officialYoutubeUrl) {
+    jobs.push({
+      scan_type: "youtube_channel_scan",
+      worker_task_type: "youtube.investigate",
+      frequency: "daily",
+      input: {
+        channelUrl: p.officialYoutubeUrl,
+        name: p.creatorName,
+        keywords: p.keywords,
+        source: "content_registry",
+        assetName: p.creatorName,
+      },
+    });
+  }
+
+  if (p.officialInstagramUrl) {
+    jobs.push({
+      scan_type: "instagram_profile_scan",
+      worker_task_type: "instagram.investigate",
+      frequency: "daily",
+      input: {
+        profileUrl: p.officialInstagramUrl,
+        name: p.creatorName,
+        keywords: p.keywords,
+        source: "content_registry",
+        assetName: p.creatorName,
+      },
+    });
+  }
+
+  jobs.push({
+    scan_type: "contact_discovery",
+    worker_task_type: "contact.discover",
+    frequency: "weekly",
+    input: {
+      name: p.creatorName,
+      channelUrl: p.officialYoutubeUrl ?? undefined,
+      socialLinks: [p.officialInstagramUrl, p.officialYoutubeUrl].filter(Boolean) as string[],
+      username: igUser || ytUser,
+      keywords: p.keywords,
+      source: "content_registry",
+      assetName: p.creatorName,
+    },
+  });
+
+  return jobs;
+}
+
+// Reverse-image job — only attached when we have an actual image asset.
+// The `imageUrl` is signed at dispatch time from asset.storage_path.
+const IMAGE_REVERSE_JOB: BuiltJob = {
   scan_type: "image_reverse_daily",
-  worker_task_type: "image.reverse" as const,
-  frequency: "daily" as const,
-  label: "Reverse image search — Google Lens → Bing → Yandex",
-  buildInput: (p: ProtectionProfile) => ({
+  worker_task_type: "image.reverse",
+  frequency: "daily",
+  input: {
     providers: ["google_lens", "bing_visual", "yandex_images"],
     source: "content_registry",
-    assetName: p.creatorName,
-    // imageUrl injected at dispatch time
-  }),
+  },
 };
 
 
