@@ -299,9 +299,8 @@ function validateWorkerPayload(
     if (need("imageUrl")) return { ok: false, missingField: "imageUrl", reason: `Missing required field "imageUrl" for scan "${scanType}" (image.reverse). Ensure the asset has a stored image file.` };
     return { ok: true };
   }
-  if (workerTaskType === "image.reverse") {
-    if (need("imageUrl")) return { ok: false, missingField: "imageUrl", reason: `Missing required field "imageUrl" for scan "${scanType}" (image.reverse). Ensure the asset has a stored image file.` };
-    return { ok: true };
+  if (!ALLOWED_WORKER_TYPES.includes(workerTaskType as any)) {
+    return { ok: false, missingField: "type", reason: `Invalid task type "${workerTaskType}". Allowed: ${ALLOWED_WORKER_TYPES.join(", ")}.` };
   }
   if (workerTaskType === "youtube.investigate" || workerTaskType === "instagram.investigate") {
     const urlField = workerTaskType === "youtube.investigate" ? "channelUrl" : "profileUrl";
