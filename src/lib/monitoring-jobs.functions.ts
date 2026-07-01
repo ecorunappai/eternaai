@@ -437,20 +437,37 @@ ${JSON.stringify(hits.map((h) => ({ url: h.url, title: h.title, snippet: h.snipp
       }
     }
 
+    let assetId = data.assetId;
+    if (!assetId) {
+      const { data: firstAsset } = await supabase
+        .from("assets")
+        .select("id")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      assetId = firstAsset?.id;
+    }
+    if (!assetId) return { classified: 0, reason: "no_asset" };
+
+    const scoreToRisk = (s: number) =>
+      s >= 75 ? "critical" : s >= 55 ? "high" : s >= 35 ? "medium" : "low";
+
     const rows = ai.map((h) => ({
       user_id: userId,
-      asset_id: data.assetId ?? null,
-      source_url: h.url,
-      title: (h.title ?? "").slice(0, 500),
+      asset_id: assetId as string,
+      source_url: String(h.url ?? ""),
+      video_title: (h.title ?? "").slice(0, 500),
       platform: h.platform ?? "web",
-      thumbnail_url: h.screenshot ?? null,
-      snippet: (h.snippet ?? "").slice(0, 1000),
-      match_reason: h.reason ?? h.query ?? "monitoring",
-      category: h.category,
-      risk_score: h.risk_score,
-      suggested_action: h.action,
+      preview_url: h.screenshot ?? null,
+      notes: (h.snippet ?? h.reason ?? h.query ?? "").slice(0, 1000),
+      discovered_via: "browser_agent",
+      ai_score: h.risk_score,
+      final_confidence_score: h.risk_score,
+      violation_category: h.category,
+      result_category: h.action,
+      risk_level: scoreToRisk(h.risk_score),
       status: "pending",
-      discovered_at: new Date().toISOString(),
     }));
 
     const { error } = await supabase.from("discovered_matches").insert(rows);
