@@ -174,6 +174,80 @@ function platformFromHost(host: string): string {
   return host.replace(/^www\./, "").split(".")[0].replace(/^./, (c) => c.toUpperCase());
 }
 
+async function runKeywordPlatformScan(
+  supabase: any,
+  userId: string,
+  asset: any,
+): Promise<{ inserted: number; hits: number }> {
+  if (!process.env.BRIGHTDATA_API_TOKEN) return { inserted: 0, hits: 0 };
+  const { brightdataGoogleSearch } = await import("./brightdata.functions");
+
+  const query = [asset.title, asset.description].filter(Boolean).join(" ").trim();
+  if (!query || query.length < 3) return { inserted: 0, hits: 0 };
+
+  const platforms: Array<{ site: string; label: string }> = [
+    { site: "youtube.com", label: "YouTube" },
+    { site: "instagram.com", label: "Instagram" },
+    { site: "tiktok.com", label: "TikTok" },
+    { site: "x.com", label: "Twitter/X" },
+    { site: "facebook.com", label: "Facebook" },
+    { site: "reddit.com", label: "Reddit" },
+  ];
+
+  const rows: any[] = [];
+  const seen = new Set<string>();
+  await Promise.all(platforms.map(async (p) => {
+    try {
+      const results = await brightdataGoogleSearch(query, { limit: 8, site: p.site });
+      for (const r of results) {
+        if (!r.url || seen.has(r.url)) continue;
+        seen.add(r.url);
+        let host = "";
+        try { host = new URL(r.url).hostname.toLowerCase(); } catch { continue; }
+        rows.push({
+          user_id: userId,
+          asset_id: asset.id,
+          source_url: r.url,
+          preview_url: r.thumbnail ?? null,
+          platform: p.label,
+          domain: host,
+          discovered_via: "brightdata_keyword",
+          match_type: "keyword",
+          phash_score: 0,
+          dhash_score: 0,
+          clip_score: 0,
+          ai_score: 60,
+          final_confidence_score: 60,
+          risk_level: "medium",
+          notes: r.snippet?.slice(0, 240) ?? r.title?.slice(0, 240) ?? "",
+          status: "pending_review",
+        });
+      }
+    } catch (e) {
+      console.warn(`Keyword scan failed for ${p.site}`, (e as Error).message);
+    }
+  }));
+
+  if (rows.length === 0) return { inserted: 0, hits: 0 };
+
+  // De-dupe against existing matches for this asset.
+  const { data: existing } = await supabase
+    .from("discovered_matches")
+    .select("source_url")
+    .eq("asset_id", asset.id);
+  const existingUrls = new Set((existing ?? []).map((e: any) => e.source_url));
+  const fresh = rows.filter((r) => !existingUrls.has(r.source_url));
+  if (fresh.length === 0) return { inserted: 0, hits: rows.length };
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("discovered_matches").insert(fresh).select("id");
+  if (insErr) {
+    console.warn("Keyword match insert failed", insErr.message);
+    return { inserted: 0, hits: rows.length };
+  }
+  return { inserted: inserted?.length ?? 0, hits: rows.length };
+}
+
 export const runRealMatchingScan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => RealScanInput.parse(d))
@@ -182,13 +256,32 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
     const { data: asset, error } = await supabase.from("assets").select("*").eq("id", data.assetId).maybeSingle();
     if (error || !asset) throw new Error("Asset not found");
     if (asset.user_id !== userId) throw new Error("Forbidden");
-    if (asset.asset_type !== "image") throw new Error("Reverse image search only supports images.");
-    if (!asset.storage_path) throw new Error("Asset has no stored file.");
+    if (!asset.storage_path && asset.asset_type === "image") throw new Error("Asset has no stored file.");
+
+    // Parallel: keyword-based multi-platform discovery (YouTube/IG/TikTok/X/FB/Reddit).
+    const keywordScan = runKeywordPlatformScan(supabase, userId, asset).catch((e) => {
+      console.warn("Keyword scan error", (e as Error).message);
+      return { inserted: 0, hits: 0 };
+    });
+
+    // Image-only: reverse image search path below.
+    if (asset.asset_type !== "image") {
+      const kw = await keywordScan;
+      return {
+        inserted: kw.inserted,
+        matches: [],
+        via: "keyword",
+        note: kw.inserted > 0
+          ? `Found ${kw.inserted} keyword match${kw.inserted === 1 ? "" : "es"} across YouTube, Instagram, TikTok, X, Facebook, Reddit.`
+          : "No keyword matches surfaced on public platforms.",
+      };
+    }
 
     // Long-lived signed URL so the Browser Agent (and each search provider it opens) can fetch the image.
     const { data: signed, error: sErr } = await supabase.storage
       .from("assets").createSignedUrl(asset.storage_path, 60 * 60 * 24 * 7);
     if (sErr || !signed?.signedUrl) throw new Error("Could not sign asset URL");
+
 
     // Preferred path: Bright Data SERP API (Google Lens uploadbyurl) — synchronous.
     if (process.env.BRIGHTDATA_API_TOKEN) {
