@@ -474,7 +474,9 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
         .eq("user_id", userId)
         .in("status", ["queued", "running", "browsing", "navigating", "extracting", "analyzing"]);
       if ((count ?? 0) > 0) continue; // honor 1-active limit
-      const job = jobs[0];
+      const job0 = jobs[0];
+      const remapped = await remapLegacyJob(supabaseAdmin, job0);
+      const job = { ...job0, worker_task_type: remapped.type, config: remapped.input };
       const built = await buildJobInput(supabaseAdmin, job);
       if ("error" in built && typeof (built as any).error === "string") continue;
       const payload = built as Record<string, unknown>;
