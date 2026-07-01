@@ -740,7 +740,48 @@ function TakedownPage() {
           </table>
         </div>
       </section>
+
+      {/* Manager approval modal */}
+      {managerModal && active && agentTask && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setManagerModal(false)}>
+          <div className="w-full max-w-2xl rounded-lg bg-background border shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-violet-600" />
+                <div className="font-semibold text-sm">Manager Approval Required</div>
+              </div>
+              <button onClick={() => setManagerModal(false)}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="text-xs text-muted-foreground">
+                Agent halted at <span className="font-mono">{agentTask.status}</span>. Review evidence and pre-filled fields, then approve manual submission. Eterna AI will never submit the form for you.
+              </div>
+              {(agentTask.screenshots ?? []).slice(-1).map((s: string, i: number) => (
+                <img key={i} src={s} alt="Prepared form screenshot" className="w-full rounded border max-h-64 object-contain bg-black/5" />
+              ))}
+              <details className="rounded border bg-background/60" open>
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Prepared field values</summary>
+                <pre className="p-3 text-[11px] whitespace-pre-wrap max-h-56 overflow-auto">{JSON.stringify(agentTask.extracted ?? {}, null, 2)}</pre>
+              </details>
+              <div className="rounded bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-[11px] text-amber-800 flex gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Approving records the decision and marks the takedown as submitted after you complete the final submit manually in the opened form.
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={onManagerReject} disabled={agentBusy} className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 text-destructive px-3 py-1.5 text-xs hover:bg-destructive/10 disabled:opacity-50">
+                  <X className="h-3.5 w-3.5" /> Reject / edit
+                </button>
+                <button onClick={onManagerApprove} disabled={agentBusy} className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 text-white px-3 py-1.5 text-xs hover:bg-violet-700 disabled:opacity-50">
+                  {agentBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Approve manual submission
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
+
   );
 }
 
