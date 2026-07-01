@@ -333,6 +333,38 @@ async function buildJobInput(
   return { ...base, imageUrl: signed.signedUrl, assetId: asset.id, assetName: asset.title ?? "" };
 }
 
+// Auto-remap legacy jobs whose worker_task_type is no longer accepted
+// (e.g. old "web.search" rows created before we split scans per platform).
+async function remapLegacyJob(
+  supabase: any,
+  job: any,
+): Promise<{ type: string; input: Record<string, unknown> }> {
+  if (ALLOWED_WORKER_TYPES.includes(job.worker_task_type)) {
+    return { type: job.worker_task_type, input: (job.config ?? {}) as Record<string, unknown> };
+  }
+  const cfg = (job.config ?? {}) as Record<string, unknown>;
+  const name = (cfg.name as string) || (job.asset_name as string) || "";
+  const remapped = {
+    type: "contact.discover",
+    input: {
+      name,
+      keywords: cfg.keywords ?? [],
+      socialLinks: cfg.socialLinks ?? [],
+      username: cfg.username,
+      source: "content_registry_legacy_remap",
+      assetName: name,
+      originalType: job.worker_task_type,
+    },
+  };
+  // Persist remap so subsequent runs skip this branch.
+  await supabase
+    .from("monitoring_jobs")
+    .update({ worker_task_type: remapped.type, config: remapped.input as any })
+    .eq("id", job.id);
+  return remapped;
+}
+
+
 
 export const runMonitoringJobNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
