@@ -4,6 +4,7 @@
 import type { RunCtx } from "../queue.js";
 import { appendStep, patchTask, setExtracted } from "../store.js";
 import { guardPublicPage } from "../guards.js";
+import { handleConsent } from "../consent.js";
 import { snapshot, snapshotError } from "../screenshot.js";
 
 const NAV_TIMEOUT = 120_000;
