@@ -100,11 +100,8 @@ type ProtectionProfile = {
   issueTypes?: string[];
 };
 
-function slug(s: string) {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "");
-}
-
-function nextRunFor(frequency: string, from = new Date()): Date {
+function nextRunFor(frequency: string, from = new Date()): Date | null {
+  if (frequency === "once") return null;
   const d = new Date(from);
   if (frequency === "weekly") d.setDate(d.getDate() + 7);
   else d.setDate(d.getDate() + 1);
