@@ -138,42 +138,56 @@ export const searxngSearch = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => SearchInput.parse(d))
   .handler(async ({ data }) => {
     const { baseUrl, bearer } = searxngConfig();
-    if (!baseUrl) {
-      return {
-        ok: false as const,
-        error: "SearXNG search engine is offline. Set SEARXNG_BASE_URL to your self-hosted instance (see /services/README.md).",
-        results: [] as EternaResult[],
-      };
-    }
-
     const limit = data.limit ?? 20;
     const freshness = data.freshness === "latest" ? "month" : (data.freshness === "any" ? "" : data.freshness ?? "");
     let q = data.q;
     let category = data.category;
+    const siteMap: Record<string, string> = {
+      youtube: "youtube.com", instagram: "instagram.com", facebook: "facebook.com",
+      tiktok: "tiktok.com", x: "x.com", reddit: "reddit.com",
+    };
+    let site: string | undefined;
     if (data.platform && data.platform !== "all") {
-      const siteMap: Record<string, string> = {
-        youtube: "youtube.com", instagram: "instagram.com", facebook: "facebook.com",
-        tiktok: "tiktok.com", x: "x.com", reddit: "reddit.com",
-      };
-      const site = siteMap[data.platform];
+      site = siteMap[data.platform];
       if (site) q = `site:${site} ${q}`;
       if (data.platform === "news") category = "news";
     }
 
-    try {
-      const raws = await searxngQuery(baseUrl, q, {
-        categories: category, timeRange: (freshness as any) || undefined, bearer,
-      });
-      const normalized = raws
-        .map((r) => normalize(r, { subject: data.q, keywords: [data.q] }))
-        .filter((r): r is EternaResult => !!r)
-        .slice(0, limit);
-      return { ok: true as const, results: normalized };
-    } catch (e) {
-      return {
-        ok: false as const,
-        error: `SearXNG search engine is offline. Please start the Docker service. (${(e as Error).message})`,
-        results: [] as EternaResult[],
-      };
+    // Try SearXNG first when configured.
+    if (baseUrl) {
+      try {
+        const raws = await searxngQuery(baseUrl, q, {
+          categories: category, timeRange: (freshness as any) || undefined, bearer,
+        });
+        const normalized = raws
+          .map((r) => normalize(r, { subject: data.q, keywords: [data.q] }))
+          .filter((r): r is EternaResult => !!r)
+          .slice(0, limit);
+        if (normalized.length > 0) return { ok: true as const, results: normalized };
+      } catch { /* fall through to Bright Data */ }
     }
+
+    // Fallback: Bright Data SERP API.
+    if (process.env.BRIGHTDATA_API_TOKEN) {
+      try {
+        const { brightdataGoogleSearch } = await import("./brightdata.functions");
+        const results = await brightdataGoogleSearch(data.q, { limit, site });
+        if (results.length > 0) return { ok: true as const, results };
+      } catch (e) {
+        return {
+          ok: false as const,
+          error: `Bright Data SERP failed: ${(e as Error).message}`,
+          results: [] as EternaResult[],
+        };
+      }
+    }
+
+    return {
+      ok: false as const,
+      error: baseUrl
+        ? "No results from SearXNG and Bright Data fallback returned nothing."
+        : "SearXNG offline and Bright Data not configured. Set SEARXNG_BASE_URL or BRIGHTDATA_API_TOKEN.",
+      results: [] as EternaResult[],
+    };
   });
+
