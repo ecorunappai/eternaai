@@ -188,7 +188,7 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
       worker_task_type: t.worker_task_type,
       frequency: t.frequency,
       status: "active",
-      config: t.input,
+      config: t.input as any,
       next_run_at: new Date().toISOString(),
     }));
 
