@@ -156,10 +156,12 @@ const TaskSchema = z.object({
     "email.prepare",
     "takedown.prepare",
     "web.search",
+    "image.reverse",
   ]),
   input: z.record(z.any()).default({}),
   caseId: z.string().optional(),
 });
+
 
 app.post("/tasks", (req, res) => {
   const p = TaskSchema.safeParse(req.body);
