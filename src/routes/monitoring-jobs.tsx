@@ -39,10 +39,26 @@ function MonitoringJobsPage() {
   async function onRun(j: any) {
     setBusy(j.id);
     try {
-      const r = (await runNow({ data: { id: j.id } })) as { offline?: boolean; reason?: string; queued?: boolean };
-      if (r.offline) toast.error(`Agent offline: ${r.reason ?? ""}`);
-      else toast.success(r.queued ? "Queued — another task is active" : "Task started");
-
+      const r = (await runNow({ data: { id: j.id } })) as {
+        offline?: boolean;
+        invalid?: boolean;
+        reason?: string;
+        missingField?: string;
+        status?: number;
+        queued?: boolean;
+      };
+      if (r.invalid) {
+        toast.error(
+          r.missingField
+            ? `Invalid task payload — missing "${r.missingField}": ${r.reason ?? ""}`
+            : `Invalid task payload${r.status ? ` (HTTP ${r.status})` : ""}: ${r.reason ?? ""}`,
+          { duration: 8000 },
+        );
+      } else if (r.offline) {
+        toast.error(`Browser Agent offline: ${r.reason ?? ""}`);
+      } else {
+        toast.success(r.queued ? "Queued — another task is active" : "Task started");
+      }
       reload();
     } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(null); }

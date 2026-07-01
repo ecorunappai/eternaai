@@ -245,13 +245,19 @@ export const deleteMonitoringJob = createServerFn({ method: "POST" })
   });
 
 // ---- Run now: enqueue an agent_task for this job (respects 1-active limit) ----
+// Distinguishes network/offline failures from 400 payload validation errors.
+type EnqueueResult =
+  | { ok: true; task: any }
+  | { ok: false; kind: "offline"; reason: string }
+  | { ok: false; kind: "invalid"; reason: string; status: number };
+
 async function enqueueViaWorker(input: {
   type: string;
   input: Record<string, unknown>;
-}): Promise<{ offline: boolean; reason?: string; task?: any }> {
+}): Promise<EnqueueResult> {
   const baseUrl = process.env.BROWSER_AGENT_URL;
   const token = process.env.BROWSER_AGENT_TOKEN ?? "";
-  if (!baseUrl) return { offline: true, reason: "BROWSER_AGENT_URL not configured" };
+  if (!baseUrl) return { ok: false, kind: "offline", reason: "BROWSER_AGENT_URL not configured" };
   try {
     const res = await fetch(`${baseUrl.replace(/\/$/, "")}/tasks`, {
       method: "POST",
@@ -262,12 +268,57 @@ async function enqueueViaWorker(input: {
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(20000),
     });
-    if (!res.ok) return { offline: true, reason: `Agent HTTP ${res.status}` };
-    const body = (await res.json()) as { task: any };
-    return { offline: false, task: body.task };
+    if (res.ok) {
+      const body = (await res.json()) as { task: any };
+      return { ok: true, task: body.task };
+    }
+    // Read exact error body — surface as invalid payload for 4xx, offline otherwise.
+    const raw = await res.text().catch(() => "");
+    let detail = raw.slice(0, 300);
+    try {
+      const j = JSON.parse(raw);
+      detail = j.error ?? j.message ?? detail;
+    } catch { /* keep raw */ }
+    if (res.status >= 400 && res.status < 500) {
+      return { ok: false, kind: "invalid", status: res.status, reason: detail || `HTTP ${res.status}` };
+    }
+    return { ok: false, kind: "offline", reason: `Agent HTTP ${res.status}: ${detail}` };
   } catch (e) {
-    return { offline: true, reason: (e as Error).message };
+    return { ok: false, kind: "offline", reason: (e as Error).message };
   }
+}
+
+// Validate the worker task payload BEFORE dispatch to catch missing fields early
+// and return a precise message ("imageUrl is required") instead of a generic 400.
+function validateWorkerPayload(
+  workerTaskType: string,
+  scanType: string,
+  input: Record<string, unknown>,
+): { ok: true } | { ok: false; missingField: string; reason: string } {
+  const need = (f: string) => {
+    const v = input[f];
+    return v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+  };
+  if (workerTaskType === "image.reverse") {
+    if (need("imageUrl")) return { ok: false, missingField: "imageUrl", reason: `Missing required field "imageUrl" for scan "${scanType}" (image.reverse). Ensure the asset has a stored image file.` };
+    return { ok: true };
+  }
+  if (workerTaskType === "web.search") {
+    const hasQueries = Array.isArray(input.queries) && (input.queries as unknown[]).length > 0;
+    const hasName = typeof input.name === "string" && (input.name as string).trim().length > 0;
+    if (!hasQueries && !hasName) {
+      return { ok: false, missingField: "queries", reason: `Missing "queries" (or "name") for scan "${scanType}" (web.search).` };
+    }
+    return { ok: true };
+  }
+  if (workerTaskType === "youtube.investigate" || workerTaskType === "instagram.investigate") {
+    const urlField = workerTaskType === "youtube.investigate" ? "channelUrl" : "profileUrl";
+    if (need(urlField) && need("videoUrl") && need("postUrl") && need("url")) {
+      return { ok: false, missingField: urlField, reason: `Missing "${urlField}" (or url) for scan "${scanType}".` };
+    }
+    return { ok: true };
+  }
+  return { ok: true };
 }
 
 // Build the runner input for a job, signing a fresh image URL for image.reverse tasks.
@@ -314,13 +365,22 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
 
     const built = await buildJobInput(supabase, job);
     if ("error" in built && typeof built.error === "string") {
-      return { offline: true, reason: built.error, queued: (activeCount ?? 0) > 0 };
+      return { offline: false, invalid: true, reason: built.error, missingField: "asset", queued: (activeCount ?? 0) > 0 };
     }
-    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: built as Record<string, unknown> });
+    const payload = built as Record<string, unknown>;
 
+    // Pre-flight validation — surfaces missing fields as invalid, not offline.
+    const check = validateWorkerPayload(job.worker_task_type, job.scan_type, payload);
+    if (!check.ok) {
+      return { offline: false, invalid: true, reason: check.reason, missingField: check.missingField, queued: (activeCount ?? 0) > 0 };
+    }
 
+    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: payload });
 
-    if (enq.offline) {
+    if (!enq.ok && enq.kind === "invalid") {
+      return { offline: false, invalid: true, reason: enq.reason, status: enq.status, queued: (activeCount ?? 0) > 0 };
+    }
+    if (!enq.ok) {
       return { offline: true, reason: enq.reason, queued: (activeCount ?? 0) > 0 };
     }
 
@@ -390,12 +450,11 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
       const job = jobs[0];
       const built = await buildJobInput(supabaseAdmin, job);
       if ("error" in built && typeof (built as any).error === "string") continue;
-      const enq = await enqueueViaWorker({
-        type: job.worker_task_type,
-        input: built as Record<string, unknown>,
-      });
-
-      if (enq.offline) continue;
+      const payload = built as Record<string, unknown>;
+      const check = validateWorkerPayload(job.worker_task_type, job.scan_type, payload);
+      if (!check.ok) continue;
+      const enq = await enqueueViaWorker({ type: job.worker_task_type, input: payload });
+      if (!enq.ok) continue;
       await supabaseAdmin.from("agent_tasks").upsert(
         {
           user_id: userId,
