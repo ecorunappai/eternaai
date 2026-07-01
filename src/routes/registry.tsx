@@ -98,6 +98,20 @@ function Registry() {
             timestamp_sec: k.timestamp, phash: k.phash,
           })));
         }
+
+        // Auto-trigger Browser Agent monitoring — no manual step required.
+        if (inserted) {
+          try {
+            await setupFn({
+              data: {
+                assetId: inserted.id,
+                creatorName: file.name.replace(/\.[^.]+$/, ""),
+                keywords: [],
+                issueTypes: ["impersonation", "reupload", "reaction", "leaked", "scam"],
+              },
+            });
+          } catch (err) { console.warn("auto monitoring", err); }
+        }
       }
       toast.success(`${files.length} asset(s) fingerprinted (SHA-256 + perceptual hashes)`);
       load();
