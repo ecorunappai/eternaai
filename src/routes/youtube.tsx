@@ -122,12 +122,26 @@ function YouTubeDash() {
       const tasks: Promise<any>[] = [scanAll({ data: { assetId: selectedAsset || null, query: query.trim() } })];
       if (selectedAsset) tasks.push(scan({ data: { assetId: selectedAsset, query: query.trim() } }));
       const results = await Promise.allSettled(tasks);
-      const counts = results.map((r) => r.status === "fulfilled" ? (r.value?.inserted ?? 0) : 0);
-      const total = counts.reduce((a, b) => a + b, 0);
+      const values = results.map((r) => r.status === "fulfilled" ? r.value : null);
+      const total = values.reduce((a, v) => a + Number(v?.inserted ?? 0), 0);
       const errs = results.filter((r) => r.status === "rejected") as PromiseRejectedResult[];
-      if (total === 0) toast.message(errs[0] ? String(errs[0].reason?.message ?? errs[0].reason) : "No new matches surfaced.");
-      else toast.success(`${total} suspected matches across all platforms for "${query.trim()}"`);
+      const source = values.find((v) => v?.source)?.source;
+      const counters = values.find((v) => v?.counters)?.counters as Record<string, number> | undefined;
+      const platformSummary = counters
+        ? Object.entries(counters).filter(([, n]) => n > 0).map(([p, n]) => `${p}:${n}`).join(" · ")
+        : "";
+      if (errs.length && total === 0) {
+        toast.error(String(errs[0].reason?.message ?? errs[0].reason));
+      } else if (total === 0) {
+        toast.message(
+          `No new matches for "${query.trim()}"`,
+          { description: `Searched ${source ?? "web"} across YouTube, Instagram, TikTok, Facebook, X, Reddit, News, Websites. Try a broader keyword or check back after the next scheduled scan.` },
+        );
+      } else {
+        toast.success(`${total} suspected matches for "${query.trim()}"`, { description: platformSummary || undefined });
+      }
       load();
+
     } catch (e) { toast.error((e as Error).message); }
     finally { setScanning(false); }
   }
