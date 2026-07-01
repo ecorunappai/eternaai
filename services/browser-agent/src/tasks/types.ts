@@ -10,7 +10,8 @@ export type TaskType =
   | "instagram.investigate"
   | "contact.discover"
   | "email.prepare"
-  | "takedown.prepare";
+  | "takedown.prepare"
+  | "web.search";
 
 export type TaskStatus =
   | "queued"

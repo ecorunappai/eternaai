@@ -7,67 +7,90 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
+// Every scan uses the Browser Agent's `web.search` runner (Google SERP →
+// per-platform evidence capture). Firecrawl is no longer part of monitoring.
+const PLATFORMS_ALL = ["youtube", "instagram", "tiktok", "facebook", "reddit", "twitter", "news", "web"];
+
+function baseQueries(name: string, username?: string, keywords: string[] = []): string[] {
+  const q: string[] = [];
+  if (name) {
+    q.push(`"${name}"`);
+    for (const s of ["fake", "troll", "reaction", "leaked", "scam", "impersonation", "reupload", "expose"]) {
+      q.push(`"${name}" ${s}`);
+    }
+    q.push(`site:youtube.com "${name}"`);
+    q.push(`site:reddit.com "${name}"`);
+    q.push(`site:tiktok.com "${name}"`);
+  }
+  if (username) {
+    q.push(`"${username}"`);
+    q.push(`site:instagram.com ${username}`);
+    q.push(`site:tiktok.com ${username}`);
+    q.push(`site:facebook.com ${username}`);
+  }
+  for (const k of keywords.slice(0, 5)) if (name) q.push(`"${name}" ${k}`);
+  return Array.from(new Set(q));
+}
+
 const SCAN_TEMPLATES = [
   {
-    scan_type: "youtube_latest",
-    worker_task_type: "youtube.investigate",
+    scan_type: "quick_scan",
+    worker_task_type: "web.search",
     frequency: "daily",
-    label: "YouTube — latest mentions",
+    label: "Quick scan — daily multi-platform sweep",
     buildInput: (p: ProtectionProfile) => ({
-      query: `${p.creatorName} latest`,
+      name: p.creatorName,
+      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
+      keywords: p.keywords,
+      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords).slice(0, 8),
+      platforms: PLATFORMS_ALL,
+      openLimit: 5,
       source: "content_registry",
       assetName: p.creatorName,
     }),
   },
   {
-    scan_type: "youtube_troll",
-    worker_task_type: "youtube.investigate",
-    frequency: "daily",
-    label: "YouTube — troll / reaction / expose",
-    buildInput: (p: ProtectionProfile) => ({
-      query: `${p.creatorName} (troll OR reaction OR expose OR roast OR diss)`,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "instagram_impersonation",
-    worker_task_type: "instagram.investigate",
-    frequency: "daily",
-    label: "Instagram — impersonation / profile",
-    buildInput: (p: ProtectionProfile) => ({
-      profileUrl:
-        p.officialInstagramUrl ||
-        `https://www.instagram.com/${slug(p.creatorName)}/`,
-      query: `${p.creatorName} fake OR impersonation OR scam`,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "google_web",
-    worker_task_type: "youtube.investigate", // worker handles generic search
-    frequency: "daily",
-    label: "Google — web mentions",
-    buildInput: (p: ProtectionProfile) => ({
-      query: `"${p.creatorName}" ${(p.keywords ?? []).slice(0, 3).join(" ")}`.trim(),
-      engine: "google",
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "content_misuse",
-    worker_task_type: "youtube.investigate",
+    scan_type: "deep_scan",
+    worker_task_type: "web.search",
     frequency: "weekly",
-    label: "Content misuse — weekly sweep",
+    label: "Deep scan — full keyword matrix",
     buildInput: (p: ProtectionProfile) => ({
-      query: `${p.creatorName} leaked OR reupload OR stolen`,
+      name: p.creatorName,
+      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
+      keywords: p.keywords,
+      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords),
+      platforms: PLATFORMS_ALL,
+      openLimit: 12,
+      source: "content_registry",
+      assetName: p.creatorName,
+    }),
+  },
+  {
+    scan_type: "urgent_scan",
+    worker_task_type: "web.search",
+    frequency: "once",
+    label: "Urgent scan — newly registered content",
+    buildInput: (p: ProtectionProfile) => ({
+      name: p.creatorName,
+      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
+      keywords: p.keywords,
+      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords).slice(0, 6),
+      platforms: PLATFORMS_ALL,
+      openLimit: 6,
       source: "content_registry",
       assetName: p.creatorName,
     }),
   },
 ] as const;
+
+function usernameFromUrl(u?: string | null): string | undefined {
+  if (!u) return undefined;
+  try {
+    const url = new URL(u);
+    const seg = url.pathname.replace(/^\//, "").split("/")[0] || "";
+    return seg.replace(/^@/, "") || undefined;
+  } catch { return undefined; }
+}
 
 type ProtectionProfile = {
   creatorName: string;
@@ -77,11 +100,8 @@ type ProtectionProfile = {
   issueTypes?: string[];
 };
 
-function slug(s: string) {
-  return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "");
-}
-
-function nextRunFor(frequency: string, from = new Date()): Date {
+function nextRunFor(frequency: string, from = new Date()): Date | null {
+  if (frequency === "once") return null;
   const d = new Date(from);
   if (frequency === "weekly") d.setDate(d.getDate() + 7);
   else d.setDate(d.getDate() + 1);
@@ -264,13 +284,15 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
       { onConflict: "user_id,worker_task_id" },
     );
 
+    const next = nextRunFor(job.frequency);
     await supabase
       .from("monitoring_jobs")
       .update({
         last_run_at: new Date().toISOString(),
         last_worker_task_id: enq.task.id,
         run_count: (job.run_count ?? 0) + 1,
-        next_run_at: nextRunFor(job.frequency).toISOString(),
+        next_run_at: next ? next.toISOString() : new Date(Date.now() + 365 * 86400_000).toISOString(),
+        status: next ? job.status : "completed",
       })
       .eq("id", job.id);
 
@@ -325,17 +347,130 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
         },
         { onConflict: "user_id,worker_task_id" },
       );
+      const next = nextRunFor(job.frequency);
       await supabaseAdmin
         .from("monitoring_jobs")
         .update({
           last_run_at: now,
           last_worker_task_id: enq.task.id,
           run_count: (job.run_count ?? 0) + 1,
-          next_run_at: nextRunFor(job.frequency).toISOString(),
+          next_run_at: next ? next.toISOString() : new Date(Date.now() + 365 * 86400_000).toISOString(),
+          status: next ? job.status : "completed",
         })
         .eq("id", job.id);
       dispatched++;
     }
 
     return { dispatched };
+  });
+
+// ---------------------------------------------------------------
+// AI Risk Analyzer — reads an agent_task's extracted hits/evidence
+// and creates classified `discovered_matches` rows with risk score,
+// category, and suggested action. Uses Lovable AI Gateway.
+// ---------------------------------------------------------------
+export const analyzeAgentTaskResults = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      workerTaskId: z.string().min(1),
+      assetId: z.string().uuid().optional(),
+      assetName: z.string().optional(),
+    }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const { data: row } = await supabase
+      .from("agent_tasks")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("worker_task_id", data.workerTaskId)
+      .maybeSingle();
+    if (!row) throw new Error("Task not found");
+
+    const extracted = (row.extracted ?? {}) as Record<string, any>;
+    const hits: any[] = Array.isArray(extracted.evidence) && extracted.evidence.length
+      ? extracted.evidence
+      : Array.isArray(extracted.hits) ? extracted.hits : [];
+    if (!hits.length) return { classified: 0 };
+
+    const apiKey = process.env.LOVABLE_API_KEY;
+    let ai: any[] = hits.map((h) => ({ ...h, risk_score: 40, category: "monitor", action: "monitor" }));
+
+    if (apiKey) {
+      try {
+        const prompt = `You are a brand-protection analyst. For each result, classify:
+- category: one of impersonation, copyright_copy, reputation_attack, fake_account, reaction_video, defamatory, brand_misuse, benign
+- risk_score: 0-100 integer
+- action: monitor | warning_email | takedown
+Return strict JSON: {"results":[{"url":"...","category":"...","risk_score":0,"action":"..."}]}
+Target: ${data.assetName ?? ""}
+Results:
+${JSON.stringify(hits.map((h) => ({ url: h.url, title: h.title, snippet: h.snippet, platform: h.platform, query: h.query })).slice(0, 25))}`;
+
+        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
+          body: JSON.stringify({
+            model: "google/gemini-3-flash-preview",
+            messages: [{ role: "user", content: prompt }],
+            response_format: { type: "json_object" },
+          }),
+          signal: AbortSignal.timeout(45_000),
+        });
+        if (r.ok) {
+          const json = await r.json();
+          const parsed = JSON.parse(json.choices?.[0]?.message?.content ?? "{}");
+          const results: any[] = Array.isArray(parsed.results) ? parsed.results : [];
+          ai = hits.map((h) => {
+            const m = results.find((x) => x.url === h.url);
+            return {
+              ...h,
+              category: m?.category ?? "monitor",
+              risk_score: Math.max(0, Math.min(100, Number(m?.risk_score ?? 40))),
+              action: m?.action ?? "monitor",
+            };
+          });
+        }
+      } catch (e) {
+        console.warn("AI classification failed", (e as Error).message);
+      }
+    }
+
+    let assetId = data.assetId;
+    if (!assetId) {
+      const { data: firstAsset } = await supabase
+        .from("assets")
+        .select("id")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      assetId = firstAsset?.id;
+    }
+    if (!assetId) return { classified: 0, reason: "no_asset" };
+
+    const scoreToRisk = (s: number) =>
+      s >= 75 ? "critical" : s >= 55 ? "high" : s >= 35 ? "medium" : "low";
+
+    const rows = ai.map((h) => ({
+      user_id: userId,
+      asset_id: assetId as string,
+      source_url: String(h.url ?? ""),
+      video_title: (h.title ?? "").slice(0, 500),
+      platform: h.platform ?? "web",
+      preview_url: h.screenshot ?? null,
+      notes: (h.snippet ?? h.reason ?? h.query ?? "").slice(0, 1000),
+      discovered_via: "browser_agent",
+      ai_score: h.risk_score,
+      final_confidence_score: h.risk_score,
+      violation_category: h.category,
+      result_category: h.action,
+      risk_level: scoreToRisk(h.risk_score),
+      status: "pending",
+    }));
+
+    const { error } = await supabase.from("discovered_matches").insert(rows);
+    if (error) console.warn("insert discovered_matches", error.message);
+    return { classified: rows.length };
   });
