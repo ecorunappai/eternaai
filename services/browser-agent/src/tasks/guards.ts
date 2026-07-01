@@ -18,7 +18,9 @@ export type GuardResult = { ok: true } | { ok: false; reason: string };
 export async function guardPublicPage(page: Page): Promise<GuardResult> {
   try {
     const url = page.url();
-    if (/\/login\b|\/accounts\/login|consent\.youtube|accounts\.google/i.test(url)) {
+    // Cookie consent interstitials are NOT login walls — handled separately
+    // in tasks/consent.ts. Only block on real auth pages.
+    if (/\/login\b|\/accounts\/login|accounts\.google\.com\/(?:v3\/)?signin/i.test(url)) {
       return { ok: false, reason: `Redirected to login wall: ${url}` };
     }
     const body = (await page.locator("body").innerText({ timeout: 3000 }).catch(() => "")).slice(0, 4000);
