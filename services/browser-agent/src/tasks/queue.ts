@@ -27,6 +27,7 @@ const RUNNERS: Record<TaskType, (ctx: RunCtx, input: any) => Promise<void>> = {
   "contact.discover": runContact,
   "email.prepare": runEmail,
   "takedown.prepare": runTakedown,
+  "web.search": runWebSearch,
 };
 
 export interface EnqueueOpts {
