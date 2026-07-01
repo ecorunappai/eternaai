@@ -179,9 +179,6 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => RealScanInput.parse(d))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
-    const apiKey = process.env.FIRECRAWL_API_KEY;
-    if (!apiKey) throw new Error("Firecrawl is not connected. Link the Firecrawl connector and retry.");
-
     const { data: asset, error } = await supabase.from("assets").select("*").eq("id", data.assetId).maybeSingle();
     if (error || !asset) throw new Error("Asset not found");
     if (asset.user_id !== userId) throw new Error("Forbidden");
@@ -195,27 +192,96 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
 
     const lensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(signed.signedUrl)}`;
 
-    // Firecrawl scrape — request links + html so we can extract visual-result URLs and thumbnails.
-    const fcRes = await fetch("https://api.firecrawl.dev/v2/scrape", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        url: lensUrl,
-        formats: ["links", "html"],
-        onlyMainContent: false,
-        waitFor: 4500,
-        timeout: 45000,
-      }),
-    });
+    // Try Firecrawl if available; otherwise fall back to the Playwright Browser Agent.
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    let html = "";
+    let linksRaw: string[] = [];
 
-    if (!fcRes.ok) {
-      const txt = await fcRes.text().catch(() => "");
-      throw new Error(`Firecrawl error (${fcRes.status}): ${txt.slice(0, 300)}`);
+    if (apiKey) {
+      try {
+        const fcRes = await fetch("https://api.firecrawl.dev/v2/scrape", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            url: lensUrl,
+            formats: ["links", "html"],
+            onlyMainContent: false,
+            waitFor: 4500,
+            timeout: 45000,
+          }),
+        });
+        if (fcRes.ok) {
+          const fcJson: any = await fcRes.json();
+          const payload = fcJson?.data ?? fcJson;
+          linksRaw = Array.isArray(payload?.links) ? payload.links : [];
+          html = typeof payload?.html === "string" ? payload.html : "";
+        } else if (fcRes.status !== 402) {
+          const txt = await fcRes.text().catch(() => "");
+          console.warn(`Firecrawl error (${fcRes.status}): ${txt.slice(0, 200)}`);
+        }
+        // On 402 (insufficient credits) silently fall through to browser agent.
+      } catch (e) {
+        console.warn("Firecrawl unavailable, falling back to browser agent", (e as Error).message);
+      }
     }
-    const fcJson: any = await fcRes.json();
-    const payload = fcJson?.data ?? fcJson;
-    const linksRaw: string[] = Array.isArray(payload?.links) ? payload.links : [];
-    const html: string = typeof payload?.html === "string" ? payload.html : "";
+
+    // Browser Agent fallback: dispatch a web.search task and return "queued".
+    if (!html && !linksRaw.length) {
+      const baseUrl = process.env.BROWSER_AGENT_URL;
+      const token = process.env.BROWSER_AGENT_TOKEN ?? "";
+      if (!baseUrl) {
+        throw new Error(
+          "Reverse image search unavailable: Firecrawl credits are exhausted and the Browser Agent (BROWSER_AGENT_URL) is not configured.",
+        );
+      }
+      try {
+        const res = await fetch(`${baseUrl.replace(/\/$/, "")}/tasks`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            type: "web.search",
+            input: {
+              lensUrl,
+              imageUrl: signed.signedUrl,
+              assetId: asset.id,
+              assetName: asset.title,
+              source: "reverse_image_search",
+              platforms: ["google_lens", "web"],
+              openLimit: 6,
+              queries: [`reverse image match ${asset.title ?? ""}`.trim()],
+            },
+          }),
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!res.ok) throw new Error(`Agent HTTP ${res.status}`);
+        const body = (await res.json()) as { task: { id: string } };
+        await supabase.from("agent_tasks").upsert(
+          {
+            user_id: userId,
+            worker_task_id: body.task.id,
+            type: "web.search",
+            status: "queued",
+            input: { assetId: asset.id, lensUrl },
+          },
+          { onConflict: "user_id,worker_task_id" },
+        );
+        return {
+          inserted: 0,
+          matches: [],
+          queued: true,
+          taskId: body.task.id,
+          note: "Reverse image scan queued on Browser Agent — results will appear in Violations when analysis completes.",
+        };
+      } catch (e) {
+        throw new Error(
+          `Reverse image search unavailable: Firecrawl credits exhausted and Browser Agent dispatch failed (${(e as Error).message}).`,
+        );
+      }
+    }
+
 
     const candidates = collectLensCandidates(html, linksRaw);
 
