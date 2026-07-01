@@ -230,9 +230,12 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
       const baseUrl = process.env.BROWSER_AGENT_URL;
       const token = process.env.BROWSER_AGENT_TOKEN ?? "";
       if (!baseUrl) {
-        throw new Error(
-          "Reverse image search unavailable: Firecrawl credits are exhausted and the Browser Agent (BROWSER_AGENT_URL) is not configured.",
-        );
+        return {
+          inserted: 0,
+          matches: [],
+          fallback: true,
+          note: "Reverse image search unavailable: Firecrawl credits are exhausted and the Browser Agent is not configured.",
+        };
       }
       try {
         const res = await fetch(`${baseUrl.replace(/\/$/, "")}/tasks`, {
@@ -256,7 +259,16 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
           }),
           signal: AbortSignal.timeout(20_000),
         });
-        if (!res.ok) throw new Error(`Agent HTTP ${res.status}`);
+        if (!res.ok) {
+          const detail = await res.text().catch(() => "");
+          console.warn(`Browser Agent dispatch failed (${res.status}): ${detail.slice(0, 200)}`);
+          return {
+            inserted: 0,
+            matches: [],
+            fallback: true,
+            note: `Reverse image search queued failed — Firecrawl credits exhausted and Browser Agent responded HTTP ${res.status}. Try again later or top up Firecrawl credits.`,
+          };
+        }
         const body = (await res.json()) as { task: { id: string } };
         await supabase.from("agent_tasks").upsert(
           {
@@ -276,11 +288,16 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
           note: "Reverse image scan queued on Browser Agent — results will appear in Violations when analysis completes.",
         };
       } catch (e) {
-        throw new Error(
-          `Reverse image search unavailable: Firecrawl credits exhausted and Browser Agent dispatch failed (${(e as Error).message}).`,
-        );
+        console.warn("Browser Agent dispatch error", (e as Error).message);
+        return {
+          inserted: 0,
+          matches: [],
+          fallback: true,
+          note: `Reverse image search unavailable: ${(e as Error).message}. Results will resume once Firecrawl credits are topped up or the Browser Agent is reachable.`,
+        };
       }
     }
+
 
 
     const candidates = collectLensCandidates(html, linksRaw);
