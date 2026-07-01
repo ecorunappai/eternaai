@@ -7,67 +7,90 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
+// Every scan uses the Browser Agent's `web.search` runner (Google SERP →
+// per-platform evidence capture). Firecrawl is no longer part of monitoring.
+const PLATFORMS_ALL = ["youtube", "instagram", "tiktok", "facebook", "reddit", "twitter", "news", "web"];
+
+function baseQueries(name: string, username?: string, keywords: string[] = []): string[] {
+  const q: string[] = [];
+  if (name) {
+    q.push(`"${name}"`);
+    for (const s of ["fake", "troll", "reaction", "leaked", "scam", "impersonation", "reupload", "expose"]) {
+      q.push(`"${name}" ${s}`);
+    }
+    q.push(`site:youtube.com "${name}"`);
+    q.push(`site:reddit.com "${name}"`);
+    q.push(`site:tiktok.com "${name}"`);
+  }
+  if (username) {
+    q.push(`"${username}"`);
+    q.push(`site:instagram.com ${username}`);
+    q.push(`site:tiktok.com ${username}`);
+    q.push(`site:facebook.com ${username}`);
+  }
+  for (const k of keywords.slice(0, 5)) if (name) q.push(`"${name}" ${k}`);
+  return Array.from(new Set(q));
+}
+
 const SCAN_TEMPLATES = [
   {
-    scan_type: "youtube_latest",
-    worker_task_type: "youtube.investigate",
+    scan_type: "quick_scan",
+    worker_task_type: "web.search",
     frequency: "daily",
-    label: "YouTube — latest mentions",
+    label: "Quick scan — daily multi-platform sweep",
     buildInput: (p: ProtectionProfile) => ({
-      query: `${p.creatorName} latest`,
+      name: p.creatorName,
+      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
+      keywords: p.keywords,
+      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords).slice(0, 8),
+      platforms: PLATFORMS_ALL,
+      openLimit: 5,
       source: "content_registry",
       assetName: p.creatorName,
     }),
   },
   {
-    scan_type: "youtube_troll",
-    worker_task_type: "youtube.investigate",
-    frequency: "daily",
-    label: "YouTube — troll / reaction / expose",
-    buildInput: (p: ProtectionProfile) => ({
-      query: `${p.creatorName} (troll OR reaction OR expose OR roast OR diss)`,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "instagram_impersonation",
-    worker_task_type: "instagram.investigate",
-    frequency: "daily",
-    label: "Instagram — impersonation / profile",
-    buildInput: (p: ProtectionProfile) => ({
-      profileUrl:
-        p.officialInstagramUrl ||
-        `https://www.instagram.com/${slug(p.creatorName)}/`,
-      query: `${p.creatorName} fake OR impersonation OR scam`,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "google_web",
-    worker_task_type: "youtube.investigate", // worker handles generic search
-    frequency: "daily",
-    label: "Google — web mentions",
-    buildInput: (p: ProtectionProfile) => ({
-      query: `"${p.creatorName}" ${(p.keywords ?? []).slice(0, 3).join(" ")}`.trim(),
-      engine: "google",
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "content_misuse",
-    worker_task_type: "youtube.investigate",
+    scan_type: "deep_scan",
+    worker_task_type: "web.search",
     frequency: "weekly",
-    label: "Content misuse — weekly sweep",
+    label: "Deep scan — full keyword matrix",
     buildInput: (p: ProtectionProfile) => ({
-      query: `${p.creatorName} leaked OR reupload OR stolen`,
+      name: p.creatorName,
+      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
+      keywords: p.keywords,
+      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords),
+      platforms: PLATFORMS_ALL,
+      openLimit: 12,
+      source: "content_registry",
+      assetName: p.creatorName,
+    }),
+  },
+  {
+    scan_type: "urgent_scan",
+    worker_task_type: "web.search",
+    frequency: "once",
+    label: "Urgent scan — newly registered content",
+    buildInput: (p: ProtectionProfile) => ({
+      name: p.creatorName,
+      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
+      keywords: p.keywords,
+      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords).slice(0, 6),
+      platforms: PLATFORMS_ALL,
+      openLimit: 6,
       source: "content_registry",
       assetName: p.creatorName,
     }),
   },
 ] as const;
+
+function usernameFromUrl(u?: string | null): string | undefined {
+  if (!u) return undefined;
+  try {
+    const url = new URL(u);
+    const seg = url.pathname.replace(/^\//, "").split("/")[0] || "";
+    return seg.replace(/^@/, "") || undefined;
+  } catch { return undefined; }
+}
 
 type ProtectionProfile = {
   creatorName: string;
