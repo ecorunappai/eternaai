@@ -192,7 +192,10 @@ const TASK_TYPES = [
   "contact.discover",
   "email.prepare",
   "takedown.prepare",
+  "web.search",
+  "image.reverse",
 ] as const;
+
 
 async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
   { offline: true; reason: string } | { offline: false; data: T }
