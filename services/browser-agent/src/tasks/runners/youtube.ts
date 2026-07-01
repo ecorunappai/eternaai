@@ -104,6 +104,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
       patchTask(taskId, { status: "extracting", nextAction: "Open About page" });
       await page.goto(aboutUrl, { waitUntil: "commit", timeout: NAV_TIMEOUT });
       await page.waitForTimeout(SETTLE_MS);
+      if (await handleConsent(page, aboutUrl)) await page.waitForTimeout(2000);
       const aboutShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "about");
       appendStep(taskId, { phase: "extracting", url: aboutUrl, note: "About page captured", screenshot: aboutShot });
 
