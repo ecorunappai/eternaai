@@ -386,19 +386,23 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
       .eq("user_id", userId)
       .in("status", ["queued", "running", "browsing", "navigating", "extracting", "analyzing"]);
 
-    const built = await buildJobInput(supabase, job);
+    // Auto-remap legacy task types (e.g. web.search) to an allowed one.
+    const remapped = await remapLegacyJob(supabase, job);
+    const effectiveJob = { ...job, worker_task_type: remapped.type, config: remapped.input };
+
+    const built = await buildJobInput(supabase, effectiveJob);
     if ("error" in built && typeof built.error === "string") {
       return { offline: false, invalid: true, reason: built.error, missingField: "asset", queued: (activeCount ?? 0) > 0 };
     }
     const payload = built as Record<string, unknown>;
 
     // Pre-flight validation — surfaces missing fields as invalid, not offline.
-    const check = validateWorkerPayload(job.worker_task_type, job.scan_type, payload);
+    const check = validateWorkerPayload(effectiveJob.worker_task_type, effectiveJob.scan_type, payload);
     if (!check.ok) {
       return { offline: false, invalid: true, reason: check.reason, missingField: check.missingField, queued: (activeCount ?? 0) > 0 };
     }
 
-    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: payload });
+    const enq = await enqueueViaWorker({ type: effectiveJob.worker_task_type, input: payload });
 
     if (!enq.ok && enq.kind === "invalid") {
       return { offline: false, invalid: true, reason: enq.reason, status: enq.status, queued: (activeCount ?? 0) > 0 };
