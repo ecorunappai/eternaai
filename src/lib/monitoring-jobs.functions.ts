@@ -347,13 +347,15 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
         },
         { onConflict: "user_id,worker_task_id" },
       );
+      const next = nextRunFor(job.frequency);
       await supabaseAdmin
         .from("monitoring_jobs")
         .update({
           last_run_at: now,
           last_worker_task_id: enq.task.id,
           run_count: (job.run_count ?? 0) + 1,
-          next_run_at: nextRunFor(job.frequency).toISOString(),
+          next_run_at: next ? next.toISOString() : new Date(Date.now() + 365 * 86400_000).toISOString(),
+          status: next ? job.status : "completed",
         })
         .eq("id", job.id);
       dispatched++;
