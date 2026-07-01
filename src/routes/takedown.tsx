@@ -494,7 +494,93 @@ function TakedownPage() {
                 )}
               </div>
 
+              {/* ---------- Browser Agent — YouTube Copyright Form ---------- */}
+              {active.takedown_type?.startsWith("youtube") && (
+                <div className="rounded-md border bg-violet-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="grid h-8 w-8 place-items-center rounded-md bg-violet-600 text-white"><Bot className="h-4 w-4" /></div>
+                      <div>
+                        <div className="text-sm font-semibold">Browser Agent — YouTube Copyright</div>
+                        <div className="text-[11px] text-muted-foreground">Opens the official YouTube copyright form, pre-fills safe fields, captures screenshots, and halts before submit for manager approval.</div>
+                      </div>
+                    </div>
+                    {agentTask && (
+                      <span className="rounded-full px-2.5 py-1 text-[11px] font-medium bg-background border">
+                        {String(agentTask.status).replace(/_/g, " ")}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="rounded bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-[11px] text-amber-800 flex gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Never auto-submits. Never bypasses login/CAPTCHA. If YouTube asks for login or verification, the agent pauses for human intervention.
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={onOpenYouTubeForm}
+                      disabled={agentBusy || (active.missing_fields?.length ?? 0) > 0}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 text-white px-3 py-1.5 text-xs hover:bg-violet-700 disabled:opacity-50"
+                    >
+                      {agentBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                      Open YouTube Copyright Form
+                    </button>
+                    {agentTaskId && agentTask && !["completed","failed","cancelled"].includes(agentTask.status) && (
+                      <button
+                        onClick={onCancelAgent}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 text-destructive px-3 py-1.5 text-xs hover:bg-destructive/10"
+                      ><StopCircle className="h-3.5 w-3.5" /> Stop agent</button>
+                    )}
+                  </div>
+
+                  {agentTaskId && (
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div className="rounded border bg-background overflow-hidden">
+                        <div className="px-3 py-1.5 text-[11px] font-medium border-b flex items-center gap-2">
+                          <Camera className="h-3.5 w-3.5" />
+                          Live browser session
+                          {agentFrame?.label && <span className="text-muted-foreground">· {agentFrame.label}</span>}
+                        </div>
+                        {agentFrame?.dataUrl ? (
+                          <img src={agentFrame.dataUrl} alt="Live agent frame" className="w-full max-h-72 object-contain bg-black/5" />
+                        ) : (
+                          <div className="h-40 grid place-items-center text-[11px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" /> waiting for first frame…</div>
+                        )}
+                        {agentFrame?.pageUrl && (
+                          <div className="px-3 py-1 text-[10px] text-muted-foreground truncate">{agentFrame.pageUrl}</div>
+                        )}
+                      </div>
+                      <div className="rounded border bg-background">
+                        <div className="px-3 py-1.5 text-[11px] font-medium border-b">Timeline</div>
+                        <ol className="p-3 space-y-1.5 text-[11px] max-h-64 overflow-auto">
+                          {(agentTask?.steps ?? []).slice(-15).map((s: any, i: number) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-violet-500 shrink-0" />
+                              <div>
+                                <div className="font-medium">{s.phase}</div>
+                                <div className="text-muted-foreground">{s.note}</div>
+                              </div>
+                            </li>
+                          ))}
+                          {!(agentTask?.steps ?? []).length && <li className="text-muted-foreground">No steps yet…</li>}
+                        </ol>
+                      </div>
+                    </div>
+                  )}
+
+                  {agentTask?.status === "failed" && agentTask.error && (
+                    <div className="rounded bg-destructive/10 border border-destructive/30 px-3 py-2 text-[11px] text-destructive">
+                      {String(agentTask.error).includes("login") || String(agentTask.error).includes("captcha")
+                        ? "Manual review required — YouTube requested login/verification. Complete it in a browser then retry."
+                        : agentTask.error}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2 pt-2 border-t">
+
                 <button
                   type="button"
                   onClick={() => { try { (window.top ?? window).open(active.form_url, "_blank", "noopener,noreferrer"); } catch { window.open(active.form_url, "_blank", "noopener,noreferrer"); } }}
