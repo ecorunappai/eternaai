@@ -80,6 +80,7 @@ export async function runYouTube(ctx: RunCtx, input: any) {
       patchTask(taskId, { status: "navigating", nextAction: `Open video: ${v.title || v.url}` });
       await page.goto(v.url, { waitUntil: "commit", timeout: NAV_TIMEOUT });
       await page.waitForTimeout(SETTLE_MS);
+      if (await handleConsent(page, v.url)) await page.waitForTimeout(3000);
       const guard = await guardPublicPage(page);
       if (!guard.ok) { appendStep(taskId, { phase: "guard", url: page.url(), note: guard.reason }); continue; }
       const shot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, `video_${videosSeen.length + 1}`);
