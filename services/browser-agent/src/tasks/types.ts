@@ -11,7 +11,9 @@ export type TaskType =
   | "contact.discover"
   | "email.prepare"
   | "takedown.prepare"
-  | "web.search";
+  | "web.search"
+  | "image.reverse";
+
 
 export type TaskStatus =
   | "queued"

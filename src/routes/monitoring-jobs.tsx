@@ -39,9 +39,10 @@ function MonitoringJobsPage() {
   async function onRun(j: any) {
     setBusy(j.id);
     try {
-      const r = await runNow({ data: { id: j.id } });
-      if (r.offline) toast.error(`Agent offline: ${r.reason}`);
+      const r = (await runNow({ data: { id: j.id } })) as { offline?: boolean; reason?: string; queued?: boolean };
+      if (r.offline) toast.error(`Agent offline: ${r.reason ?? ""}`);
       else toast.success(r.queued ? "Queued — another task is active" : "Task started");
+
       reload();
     } catch (e) { toast.error((e as Error).message); }
     finally { setBusy(null); }

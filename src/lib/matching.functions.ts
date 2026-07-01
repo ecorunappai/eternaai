@@ -185,194 +185,83 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
     if (asset.asset_type !== "image") throw new Error("Reverse image search only supports images.");
     if (!asset.storage_path) throw new Error("Asset has no stored file.");
 
-    // Long-lived signed URL so Google Lens can fetch the image
+    // Long-lived signed URL so the Browser Agent (and each search provider it opens) can fetch the image.
     const { data: signed, error: sErr } = await supabase.storage
       .from("assets").createSignedUrl(asset.storage_path, 60 * 60 * 24 * 7);
     if (sErr || !signed?.signedUrl) throw new Error("Could not sign asset URL");
 
-    const lensUrl = `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(signed.signedUrl)}`;
-
-    // Try Firecrawl if available; otherwise fall back to the Playwright Browser Agent.
-    const apiKey = process.env.FIRECRAWL_API_KEY;
-    let html = "";
-    let linksRaw: string[] = [];
-
-    if (apiKey) {
-      try {
-        const fcRes = await fetch("https://api.firecrawl.dev/v2/scrape", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            url: lensUrl,
-            formats: ["links", "html"],
-            onlyMainContent: false,
-            waitFor: 4500,
-            timeout: 45000,
-          }),
-        });
-        if (fcRes.ok) {
-          const fcJson: any = await fcRes.json();
-          const payload = fcJson?.data ?? fcJson;
-          linksRaw = Array.isArray(payload?.links) ? payload.links : [];
-          html = typeof payload?.html === "string" ? payload.html : "";
-        } else if (fcRes.status !== 402) {
-          const txt = await fcRes.text().catch(() => "");
-          console.warn(`Firecrawl error (${fcRes.status}): ${txt.slice(0, 200)}`);
-        }
-        // On 402 (insufficient credits) silently fall through to browser agent.
-      } catch (e) {
-        console.warn("Firecrawl unavailable, falling back to browser agent", (e as Error).message);
-      }
-    }
-
-    // Browser Agent fallback: dispatch a web.search task and return "queued".
-    if (!html && !linksRaw.length) {
-      const baseUrl = process.env.BROWSER_AGENT_URL;
-      const token = process.env.BROWSER_AGENT_TOKEN ?? "";
-      if (!baseUrl) {
-        return {
-          inserted: 0,
-          matches: [],
-          fallback: true,
-          note: "Reverse image search unavailable: Firecrawl credits are exhausted and the Browser Agent is not configured.",
-        };
-      }
-      try {
-        const res = await fetch(`${baseUrl.replace(/\/$/, "")}/tasks`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            type: "web.search",
-            input: {
-              lensUrl,
-              imageUrl: signed.signedUrl,
-              assetId: asset.id,
-              assetName: asset.title,
-              source: "reverse_image_search",
-              platforms: ["google_lens", "web"],
-              openLimit: 6,
-              queries: [`reverse image match ${asset.title ?? ""}`.trim()],
-            },
-          }),
-          signal: AbortSignal.timeout(20_000),
-        });
-        if (!res.ok) {
-          const detail = await res.text().catch(() => "");
-          console.warn(`Browser Agent dispatch failed (${res.status}): ${detail.slice(0, 200)}`);
-          return {
-            inserted: 0,
-            matches: [],
-            fallback: true,
-            note: `Reverse image search queued failed — Firecrawl credits exhausted and Browser Agent responded HTTP ${res.status}. Try again later or top up Firecrawl credits.`,
-          };
-        }
-        const body = (await res.json()) as { task: { id: string } };
-        await supabase.from("agent_tasks").upsert(
-          {
-            user_id: userId,
-            worker_task_id: body.task.id,
-            type: "web.search",
-            status: "queued",
-            input: { assetId: asset.id, lensUrl },
-          },
-          { onConflict: "user_id,worker_task_id" },
-        );
-        return {
-          inserted: 0,
-          matches: [],
-          queued: true,
-          taskId: body.task.id,
-          note: "Reverse image scan queued on Browser Agent — results will appear in Violations when analysis completes.",
-        };
-      } catch (e) {
-        console.warn("Browser Agent dispatch error", (e as Error).message);
-        return {
-          inserted: 0,
-          matches: [],
-          fallback: true,
-          note: `Reverse image search unavailable: ${(e as Error).message}. Results will resume once Firecrawl credits are topped up or the Browser Agent is reachable.`,
-        };
-      }
-    }
-
-
-
-    const candidates = collectLensCandidates(html, linksRaw);
-
-    if (candidates.length === 0) {
-      return { inserted: 0, matches: [], note: "Google Lens returned no external visual matches for this image." };
-    }
-
-    // Take top Lens candidates that include a preview image, then verify each with the AI vision layer.
-    const top = candidates.filter((c) => c.thumb).slice(0, 8);
-    const verified: Array<Candidate & { confidence: number; transformation: string; reason: string }> = [];
-    for (const candidate of top) {
-      try {
-        const verdict = await verifyWithAi(signed.signedUrl, candidate.thumb!, candidate.host);
-        if (verdict.same_content && verdict.confidence >= 78) {
-          verified.push({
-            ...candidate,
-            confidence: Math.round(verdict.confidence),
-            transformation: verdict.transformation || "AI visual match",
-            reason: verdict.reason || "AI verified same content",
-          });
-        }
-      } catch (verifyErr) {
-        console.warn("AI visual verification failed", candidate.url, verifyErr);
-      }
-    }
-
-    await supabase
-      .from("discovered_matches")
-      .delete()
-      .eq("asset_id", asset.id)
-      .eq("user_id", userId)
-      .or("discovered_via.in.(google_lens_firecrawl,google_lens_firecrawl_ai_verified,tineye_simulated),source_url.ilike.%/u/repost/%")
-      .neq("status", "escalated");
-
-    if (verified.length === 0) {
+    // Browser Agent is the primary (and only) engine. Firecrawl is intentionally not used.
+    const baseUrl = process.env.BROWSER_AGENT_URL;
+    const token = process.env.BROWSER_AGENT_TOKEN ?? "";
+    if (!baseUrl) {
       return {
         inserted: 0,
         matches: [],
-        note: "No AI-verified matches found. Similar-looking Google Lens results were filtered out.",
+        fallback: true,
+        note: "Reverse image search is offline: the Browser Agent is not configured. Ask an admin to set BROWSER_AGENT_URL.",
       };
     }
 
-    const rows = verified.map((c, i) => {
-      // Confidence now comes from strict multimodal AI comparison, with a tiny Lens-rank adjustment.
-      const rankProxy = Math.max(45, Math.round(92 - c.rank * 4));
-      const conf = Math.max(0, Math.min(100, Math.round(c.confidence * 0.9 + rankProxy * 0.1)));
-      const risk = conf >= 85 ? "confirmed" : conf >= 70 ? "strong" : conf >= 55 ? "possible" : "review";
-      return {
-        asset_id: asset.id,
-        user_id: userId,
-        source_url: c.url,
-        platform: platformFromHost(c.host),
-        domain: c.host,
-        preview_url: c.thumb,
-        discovered_phash: null,
-        phash_score: null,
-        dhash_score: null,
-        clip_score: conf,
-        metadata_score: null,
-        ai_score: conf,
-        final_confidence_score: conf,
-        risk_level: risk,
-        match_type: c.transformation || "ai_verified_repost",
-        status: "pending",
-        discovered_via: "google_lens_firecrawl_ai_verified",
-        notes: `AI verified same content · Lens rank #${c.rank + 1} · ${c.reason}`,
-      };
-    });
+    try {
+      const res = await fetch(`${baseUrl.replace(/\/$/, "")}/tasks`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          type: "image.reverse",
+          input: {
+            imageUrl: signed.signedUrl,
+            assetId: asset.id,
+            assetName: asset.title ?? "",
+            providers: ["google_lens", "bing_visual", "yandex_images"],
+          },
+        }),
+        signal: AbortSignal.timeout(20_000),
+      });
 
-    const { data: inserted, error: insErr } = await supabase
-      .from("discovered_matches").insert(rows).select("*");
-    if (insErr) throw insErr;
-    return { inserted: inserted?.length ?? 0, matches: inserted };
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        console.warn(`Browser Agent dispatch failed (${res.status}): ${detail.slice(0, 200)}`);
+        return {
+          inserted: 0,
+          matches: [],
+          fallback: true,
+          note: `Reverse image search is temporarily unavailable (agent HTTP ${res.status}). It will retry automatically on the next scheduled scan.`,
+        };
+      }
+
+      const body = (await res.json()) as { task: { id: string } };
+      await supabase.from("agent_tasks").upsert(
+        {
+          user_id: userId,
+          worker_task_id: body.task.id,
+          type: "image.reverse",
+          status: "queued",
+          input: { assetId: asset.id, imageUrl: signed.signedUrl },
+        },
+        { onConflict: "user_id,worker_task_id" },
+      );
+
+      return {
+        inserted: 0,
+        matches: [],
+        queued: true,
+        taskId: body.task.id,
+        note: "Reverse image scan queued on the Browser Agent (Google Lens → Bing Visual → Yandex). Results appear in Violations when analysis completes.",
+      };
+    } catch (e) {
+      console.warn("Browser Agent dispatch error", (e as Error).message);
+      return {
+        inserted: 0,
+        matches: [],
+        fallback: true,
+        note: `Reverse image search is temporarily unavailable (${(e as Error).message}). It will retry on the next scheduled scan.`,
+      };
+    }
   });
+
 
 const CreateViolationInput = z.object({ matchId: z.string().uuid() });
 

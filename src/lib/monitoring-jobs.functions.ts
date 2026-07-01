@@ -83,6 +83,22 @@ const SCAN_TEMPLATES = [
   },
 ] as const;
 
+// Reverse-image template — only attached when we have an actual image asset.
+// The `imageUrl` is signed at dispatch time from asset.storage_path (below).
+const IMAGE_REVERSE_TEMPLATE = {
+  scan_type: "image_reverse_daily",
+  worker_task_type: "image.reverse" as const,
+  frequency: "daily" as const,
+  label: "Reverse image search — Google Lens → Bing → Yandex",
+  buildInput: (p: ProtectionProfile) => ({
+    providers: ["google_lens", "bing_visual", "yandex_images"],
+    source: "content_registry",
+    assetName: p.creatorName,
+    // imageUrl injected at dispatch time
+  }),
+};
+
+
 function usernameFromUrl(u?: string | null): string | undefined {
   if (!u) return undefined;
   try {
@@ -146,7 +162,21 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
       .single();
     if (profErr) throw new Error(profErr.message);
 
-    const rows = SCAN_TEMPLATES.map((t) => ({
+    const templates: Array<typeof SCAN_TEMPLATES[number] | typeof IMAGE_REVERSE_TEMPLATE> = [...SCAN_TEMPLATES];
+
+    // If this asset is an image, add a recurring reverse-image scan (Google Lens → Bing → Yandex).
+    if (data.assetId) {
+      const { data: asset } = await supabase
+        .from("assets")
+        .select("asset_type,storage_path")
+        .eq("id", data.assetId)
+        .maybeSingle();
+      if (asset?.asset_type === "image" && asset.storage_path) {
+        templates.push(IMAGE_REVERSE_TEMPLATE);
+      }
+    }
+
+    const rows = templates.map((t) => ({
       user_id: userId,
       asset_id: data.assetId ?? null,
       profile_id: profile.id,
@@ -168,6 +198,7 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
 
     const { error: jobErr } = await supabase.from("monitoring_jobs").insert(rows);
     if (jobErr) throw new Error(jobErr.message);
+
 
     return { profileId: profile.id, jobsCreated: rows.length };
   });
@@ -239,6 +270,28 @@ async function enqueueViaWorker(input: {
   }
 }
 
+// Build the runner input for a job, signing a fresh image URL for image.reverse tasks.
+async function buildJobInput(
+  supabase: any,
+  job: any,
+): Promise<Record<string, unknown> | { error: string }> {
+  const base = { ...((job.config ?? {}) as Record<string, unknown>), monitoringJobId: job.id };
+  if (job.worker_task_type !== "image.reverse") return base;
+  if (!job.asset_id) return { error: "image.reverse job missing asset_id" };
+  const { data: asset } = await supabase
+    .from("assets")
+    .select("id,storage_path,title,asset_type")
+    .eq("id", job.asset_id)
+    .maybeSingle();
+  if (!asset?.storage_path) return { error: "asset has no storage_path" };
+  const { data: signed } = await supabase.storage
+    .from("assets")
+    .createSignedUrl(asset.storage_path, 60 * 60 * 24);
+  if (!signed?.signedUrl) return { error: "could not sign asset URL" };
+  return { ...base, imageUrl: signed.signedUrl, assetId: asset.id, assetName: asset.title ?? "" };
+}
+
+
 export const runMonitoringJobNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
@@ -259,10 +312,13 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
       .eq("user_id", userId)
       .in("status", ["queued", "running", "browsing", "navigating", "extracting", "analyzing"]);
 
-    const enq = await enqueueViaWorker({
-      type: job.worker_task_type,
-        input: { ...((job.config ?? {}) as Record<string, unknown>), monitoringJobId: job.id },
-    });
+    const built = await buildJobInput(supabase, job);
+    if ("error" in built && typeof built.error === "string") {
+      return { offline: true, reason: built.error, queued: (activeCount ?? 0) > 0 };
+    }
+    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: built as Record<string, unknown> });
+
+
 
     if (enq.offline) {
       return { offline: true, reason: enq.reason, queued: (activeCount ?? 0) > 0 };
@@ -332,10 +388,13 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
         .in("status", ["queued", "running", "browsing", "navigating", "extracting", "analyzing"]);
       if ((count ?? 0) > 0) continue; // honor 1-active limit
       const job = jobs[0];
+      const built = await buildJobInput(supabaseAdmin, job);
+      if ("error" in built && typeof (built as any).error === "string") continue;
       const enq = await enqueueViaWorker({
         type: job.worker_task_type,
-        input: { ...((job.config ?? {}) as Record<string, unknown>), monitoringJobId: job.id },
+        input: built as Record<string, unknown>,
       });
+
       if (enq.offline) continue;
       await supabaseAdmin.from("agent_tasks").upsert(
         {
