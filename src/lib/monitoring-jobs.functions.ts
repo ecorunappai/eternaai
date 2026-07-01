@@ -155,7 +155,13 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
       .single();
     if (profErr) throw new Error(profErr.message);
 
-    const templates: Array<typeof SCAN_TEMPLATES[number] | typeof IMAGE_REVERSE_TEMPLATE> = [...SCAN_TEMPLATES];
+    const built: BuiltJob[] = buildScanJobs({
+      creatorName: data.creatorName,
+      officialYoutubeUrl: data.officialYoutubeUrl,
+      officialInstagramUrl: data.officialInstagramUrl,
+      keywords: data.keywords,
+      issueTypes: data.issueTypes,
+    });
 
     // If this asset is an image, add a recurring reverse-image scan (Google Lens → Bing → Yandex).
     if (data.assetId) {
@@ -165,11 +171,14 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
         .eq("id", data.assetId)
         .maybeSingle();
       if (asset?.asset_type === "image" && asset.storage_path) {
-        templates.push(IMAGE_REVERSE_TEMPLATE);
+        built.push({
+          ...IMAGE_REVERSE_JOB,
+          input: { ...IMAGE_REVERSE_JOB.input, assetName: data.creatorName },
+        });
       }
     }
 
-    const rows = templates.map((t) => ({
+    const rows = built.map((t) => ({
       user_id: userId,
       asset_id: data.assetId ?? null,
       profile_id: profile.id,
@@ -179,13 +188,7 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
       worker_task_type: t.worker_task_type,
       frequency: t.frequency,
       status: "active",
-      config: t.buildInput({
-        creatorName: data.creatorName,
-        officialYoutubeUrl: data.officialYoutubeUrl,
-        officialInstagramUrl: data.officialInstagramUrl,
-        keywords: data.keywords,
-        issueTypes: data.issueTypes,
-      }),
+      config: t.input,
       next_run_at: new Date().toISOString(),
     }));
 
