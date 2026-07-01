@@ -10,6 +10,7 @@ import { runContact } from "./runners/contact.js";
 import { runEmail } from "./runners/email.js";
 import { runTakedown } from "./runners/takedown.js";
 import { runWebSearch } from "./runners/web-search.js";
+import { runImageReverse } from "./runners/image-reverse.js";
 
 export interface RunCtx {
   browser: Browser;
@@ -28,7 +29,9 @@ const RUNNERS: Record<TaskType, (ctx: RunCtx, input: any) => Promise<void>> = {
   "email.prepare": runEmail,
   "takedown.prepare": runTakedown,
   "web.search": runWebSearch,
+  "image.reverse": runImageReverse,
 };
+
 
 export interface EnqueueOpts {
   type: TaskType;
