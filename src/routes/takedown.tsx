@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { Gavel, Loader2, ShieldCheck, ExternalLink, AlertTriangle, CheckCircle2, Edit3, Scale, X, FileText, Camera, Wand2, Download, Copy, Mail, Youtube, Link2, Unlink } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Gavel, Loader2, ShieldCheck, ExternalLink, AlertTriangle, CheckCircle2, Edit3, Scale, X, FileText, Camera, Wand2, Download, Copy, Mail, Youtube, Link2, Unlink, Bot, PlayCircle, StopCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { AppShell } from "@/components/layout/AppShell";
@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { prepareTakedown, reviewTakedown, buildAutofillArtifacts, TAKEDOWN_FORM_URLS, TAKEDOWN_LABELS } from "@/lib/takedown.functions";
 import { getYoutubeConnection, startYoutubeOAuth, disconnectYoutube, prepareYoutubeReport, markYoutubeReportSubmitted } from "@/lib/youtube-connect.functions";
+import { enqueueAgentTask, getAgentTask, getAgentLiveFrame, approveAgentTask, cancelAgentTask } from "@/lib/browser-agent-client.functions";
 
 export const Route = createFileRoute("/takedown")({
   head: () => ({ meta: [{ title: "Takedown Center — Eterna AI" }] }),
@@ -60,6 +61,120 @@ function TakedownPage() {
   const markYtSubmitted = useServerFn(markYoutubeReportSubmitted);
   const [yt, setYt] = useState<{ connection: any; oauthConfigured: boolean } | null>(null);
   const [ytBusy, setYtBusy] = useState<string | null>(null);
+
+  // ---------- Browser Agent (takedown.prepare) ----------
+  const enqueueAgent = useServerFn(enqueueAgentTask);
+  const pollAgent = useServerFn(getAgentTask);
+  const liveFrame = useServerFn(getAgentLiveFrame);
+  const approveAgent = useServerFn(approveAgentTask);
+  const cancelAgent = useServerFn(cancelAgentTask);
+  const [agentTaskId, setAgentTaskId] = useState<string | null>(null);
+  const [agentTask, setAgentTask] = useState<any | null>(null);
+  const [agentBusy, setAgentBusy] = useState(false);
+  const [agentFrame, setAgentFrame] = useState<{ dataUrl?: string; label?: string | null; pageUrl?: string | null; ts?: number } | null>(null);
+  const [managerModal, setManagerModal] = useState(false);
+  const pollRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!agentTaskId) return;
+    let stopped = false;
+    async function tick() {
+      try {
+        const [t, f] = await Promise.all([
+          pollAgent({ data: { workerTaskId: agentTaskId! } }),
+          liveFrame({ data: { workerTaskId: agentTaskId! } }),
+        ]);
+        if (stopped) return;
+        if (!t.offline && t.task) {
+          setAgentTask(t.task);
+          if (t.task.status === "waiting_approval") setManagerModal(true);
+          if (["completed", "failed", "cancelled"].includes(t.task.status)) {
+            clearInterval(pollRef.current);
+          }
+        }
+        if (!f.offline && (f as any).ready) {
+          setAgentFrame({ dataUrl: (f as any).dataUrl, label: (f as any).label, pageUrl: (f as any).pageUrl, ts: (f as any).ts });
+        } else if (!f.offline) {
+          setAgentFrame((prev) => ({ ...(prev ?? {}), label: (f as any).label ?? prev?.label ?? null }));
+        }
+      } catch { /* ignore transient */ }
+    }
+    tick();
+    pollRef.current = setInterval(tick, 2000);
+    return () => { stopped = true; clearInterval(pollRef.current); };
+  }, [agentTaskId]);
+
+  async function onOpenYouTubeForm() {
+    if (!active) return;
+    setAgentBusy(true);
+    setAgentFrame(null);
+    setAgentTask(null);
+    setManagerModal(false);
+    try {
+      const r: any = await enqueueAgent({
+        data: {
+          type: "takedown.prepare",
+          caseId: active.case_id ?? undefined,
+          input: {
+            platform: "youtube",
+            targetUrl: active.infringing_url,
+            originalUrl: active.original_url ?? undefined,
+            rightsOwnerName: active.rights_owner_name,
+            rightsOwnerEmail: active.rights_owner_email,
+            signature: active.rights_owner_name,
+            evidenceLinks: active.evidence_urls ?? [],
+            reason: active.violation_description,
+            title: active.form_fields?.original_work_description ?? active.rights_owner_name,
+          },
+        },
+      });
+      if (r.offline) { toast.error(r.reason || "Browser Agent unavailable"); return; }
+      setAgentTaskId(r.task.id);
+      toast.success("Browser Agent opening YouTube copyright form…");
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally { setAgentBusy(false); }
+  }
+
+  async function onCancelAgent() {
+    if (!agentTaskId) return;
+    await cancelAgent({ data: { workerTaskId: agentTaskId } }).catch(() => {});
+    toast.message("Agent task cancelled");
+  }
+
+  async function onManagerApprove() {
+    if (!agentTaskId || !active) return;
+    setAgentBusy(true);
+    try {
+      // Worker halts before submit; approving here only records the decision.
+      await approveAgent({ data: { workerTaskId: agentTaskId } }).catch(() => {});
+      const lastShot = (agentTask?.screenshots ?? []).slice(-1)[0];
+      await review({
+        data: {
+          takedownId: active.id,
+          action: "mark_submitted",
+          approver: form.assignedManager || "manager",
+          confirmationScreenshotUrl: lastShot,
+          notes: "Manager approved. Manual submission required — Eterna does not auto-submit.",
+        },
+      });
+      toast.success("Approved — please complete manual submission in the opened form");
+      setManagerModal(false);
+      await refresh();
+    } catch (e: any) { toast.error(e.message); }
+    finally { setAgentBusy(false); }
+  }
+
+  async function onManagerReject() {
+    if (!agentTaskId) return;
+    await cancelAgent({ data: { workerTaskId: agentTaskId } }).catch(() => {});
+    await review({ data: { takedownId: active!.id, action: "edit", notes: "Manager rejected prepared package — needs edits." } }).catch(() => {});
+    setManagerModal(false);
+    toast.message("Rejected — takedown moved back to editing");
+    await refresh();
+  }
+
+
 
   async function refreshYt() {
     try { setYt(await getYtConn({})); } catch { /* ignore */ }
@@ -379,7 +494,93 @@ function TakedownPage() {
                 )}
               </div>
 
+              {/* ---------- Browser Agent — YouTube Copyright Form ---------- */}
+              {active.takedown_type?.startsWith("youtube") && (
+                <div className="rounded-md border bg-violet-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="grid h-8 w-8 place-items-center rounded-md bg-violet-600 text-white"><Bot className="h-4 w-4" /></div>
+                      <div>
+                        <div className="text-sm font-semibold">Browser Agent — YouTube Copyright</div>
+                        <div className="text-[11px] text-muted-foreground">Opens the official YouTube copyright form, pre-fills safe fields, captures screenshots, and halts before submit for manager approval.</div>
+                      </div>
+                    </div>
+                    {agentTask && (
+                      <span className="rounded-full px-2.5 py-1 text-[11px] font-medium bg-background border">
+                        {String(agentTask.status).replace(/_/g, " ")}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="rounded bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-[11px] text-amber-800 flex gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                    Never auto-submits. Never bypasses login/CAPTCHA. If YouTube asks for login or verification, the agent pauses for human intervention.
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={onOpenYouTubeForm}
+                      disabled={agentBusy || (active.missing_fields?.length ?? 0) > 0}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 text-white px-3 py-1.5 text-xs hover:bg-violet-700 disabled:opacity-50"
+                    >
+                      {agentBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlayCircle className="h-3.5 w-3.5" />}
+                      Open YouTube Copyright Form
+                    </button>
+                    {agentTaskId && agentTask && !["completed","failed","cancelled"].includes(agentTask.status) && (
+                      <button
+                        onClick={onCancelAgent}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 text-destructive px-3 py-1.5 text-xs hover:bg-destructive/10"
+                      ><StopCircle className="h-3.5 w-3.5" /> Stop agent</button>
+                    )}
+                  </div>
+
+                  {agentTaskId && (
+                    <div className="grid md:grid-cols-2 gap-3">
+                      <div className="rounded border bg-background overflow-hidden">
+                        <div className="px-3 py-1.5 text-[11px] font-medium border-b flex items-center gap-2">
+                          <Camera className="h-3.5 w-3.5" />
+                          Live browser session
+                          {agentFrame?.label && <span className="text-muted-foreground">· {agentFrame.label}</span>}
+                        </div>
+                        {agentFrame?.dataUrl ? (
+                          <img src={agentFrame.dataUrl} alt="Live agent frame" className="w-full max-h-72 object-contain bg-black/5" />
+                        ) : (
+                          <div className="h-40 grid place-items-center text-[11px] text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin mr-2" /> waiting for first frame…</div>
+                        )}
+                        {agentFrame?.pageUrl && (
+                          <div className="px-3 py-1 text-[10px] text-muted-foreground truncate">{agentFrame.pageUrl}</div>
+                        )}
+                      </div>
+                      <div className="rounded border bg-background">
+                        <div className="px-3 py-1.5 text-[11px] font-medium border-b">Timeline</div>
+                        <ol className="p-3 space-y-1.5 text-[11px] max-h-64 overflow-auto">
+                          {(agentTask?.steps ?? []).slice(-15).map((s: any, i: number) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-violet-500 shrink-0" />
+                              <div>
+                                <div className="font-medium">{s.phase}</div>
+                                <div className="text-muted-foreground">{s.note}</div>
+                              </div>
+                            </li>
+                          ))}
+                          {!(agentTask?.steps ?? []).length && <li className="text-muted-foreground">No steps yet…</li>}
+                        </ol>
+                      </div>
+                    </div>
+                  )}
+
+                  {agentTask?.status === "failed" && agentTask.error && (
+                    <div className="rounded bg-destructive/10 border border-destructive/30 px-3 py-2 text-[11px] text-destructive">
+                      {String(agentTask.error).includes("login") || String(agentTask.error).includes("captcha")
+                        ? "Manual review required — YouTube requested login/verification. Complete it in a browser then retry."
+                        : agentTask.error}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-2 pt-2 border-t">
+
                 <button
                   type="button"
                   onClick={() => { try { (window.top ?? window).open(active.form_url, "_blank", "noopener,noreferrer"); } catch { window.open(active.form_url, "_blank", "noopener,noreferrer"); } }}
@@ -539,7 +740,48 @@ function TakedownPage() {
           </table>
         </div>
       </section>
+
+      {/* Manager approval modal */}
+      {managerModal && active && agentTask && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4" onClick={() => setManagerModal(false)}>
+          <div className="w-full max-w-2xl rounded-lg bg-background border shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-3 border-b">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4 text-violet-600" />
+                <div className="font-semibold text-sm">Manager Approval Required</div>
+              </div>
+              <button onClick={() => setManagerModal(false)}><X className="h-4 w-4" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="text-xs text-muted-foreground">
+                Agent halted at <span className="font-mono">{agentTask.status}</span>. Review evidence and pre-filled fields, then approve manual submission. Eterna AI will never submit the form for you.
+              </div>
+              {(agentTask.screenshots ?? []).slice(-1).map((s: string, i: number) => (
+                <img key={i} src={s} alt="Prepared form screenshot" className="w-full rounded border max-h-64 object-contain bg-black/5" />
+              ))}
+              <details className="rounded border bg-background/60" open>
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium">Prepared field values</summary>
+                <pre className="p-3 text-[11px] whitespace-pre-wrap max-h-56 overflow-auto">{JSON.stringify(agentTask.extracted ?? {}, null, 2)}</pre>
+              </details>
+              <div className="rounded bg-amber-500/10 border border-amber-500/30 px-3 py-2 text-[11px] text-amber-800 flex gap-2">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                Approving records the decision and marks the takedown as submitted after you complete the final submit manually in the opened form.
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={onManagerReject} disabled={agentBusy} className="inline-flex items-center gap-1.5 rounded-md border border-destructive/40 text-destructive px-3 py-1.5 text-xs hover:bg-destructive/10 disabled:opacity-50">
+                  <X className="h-3.5 w-3.5" /> Reject / edit
+                </button>
+                <button onClick={onManagerApprove} disabled={agentBusy} className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 text-white px-3 py-1.5 text-xs hover:bg-violet-700 disabled:opacity-50">
+                  {agentBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                  Approve manual submission
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
+
   );
 }
 
