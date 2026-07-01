@@ -192,7 +192,10 @@ const TASK_TYPES = [
   "contact.discover",
   "email.prepare",
   "takedown.prepare",
+  "web.search",
+  "image.reverse",
 ] as const;
+
 
 async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
   { offline: true; reason: string } | { offline: false; data: T }
@@ -218,6 +221,15 @@ async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
 
 async function persistTask(supabase: any, userId: string, task: any) {
   if (!task) return;
+  // Detect a completion transition so we only analyze once per task.
+  const { data: prev } = await supabase
+    .from("agent_tasks")
+    .select("status")
+    .eq("user_id", userId)
+    .eq("worker_task_id", task.id)
+    .maybeSingle();
+  const wasCompleted = prev?.status === "completed" || prev?.status === "analyzed";
+
   await supabase.from("agent_tasks").upsert({
     user_id: userId,
     case_id: task.caseId ?? null,
@@ -231,7 +243,19 @@ async function persistTask(supabase: any, userId: string, task: any) {
     next_action: task.nextAction ?? null,
     error: task.error ?? null,
   }, { onConflict: "user_id,worker_task_id" });
+
+  // On completion of a discovery task, feed evidence into AI analysis pipeline.
+  const isDiscovery = task.type === "image.reverse" || task.type === "web.search";
+  if (!wasCompleted && task.status === "completed" && isDiscovery) {
+    try {
+      const { analyzeCompletedAgentTask } = await import("./agent-analysis.server");
+      await analyzeCompletedAgentTask(supabase, userId, task);
+    } catch (e) {
+      console.warn("post-completion analysis failed", (e as Error).message);
+    }
+  }
 }
+
 
 export const enqueueAgentTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
