@@ -155,6 +155,7 @@ const TaskSchema = z.object({
     "contact.discover",
     "email.prepare",
     "takedown.prepare",
+    "web.search",
   ]),
   input: z.record(z.any()).default({}),
   caseId: z.string().optional(),
