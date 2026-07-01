@@ -7,95 +7,88 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
-// Every scan uses the Browser Agent's `web.search` runner (Google SERP →
-// per-platform evidence capture). Firecrawl is no longer part of monitoring.
-const PLATFORMS_ALL = ["youtube", "instagram", "tiktok", "facebook", "reddit", "twitter", "news", "web"];
-
-function baseQueries(name: string, username?: string, keywords: string[] = []): string[] {
-  const q: string[] = [];
-  if (name) {
-    q.push(`"${name}"`);
-    for (const s of ["fake", "troll", "reaction", "leaked", "scam", "impersonation", "reupload", "expose"]) {
-      q.push(`"${name}" ${s}`);
-    }
-    q.push(`site:youtube.com "${name}"`);
-    q.push(`site:reddit.com "${name}"`);
-    q.push(`site:tiktok.com "${name}"`);
-  }
-  if (username) {
-    q.push(`"${username}"`);
-    q.push(`site:instagram.com ${username}`);
-    q.push(`site:tiktok.com ${username}`);
-    q.push(`site:facebook.com ${username}`);
-  }
-  for (const k of keywords.slice(0, 5)) if (name) q.push(`"${name}" ${k}`);
-  return Array.from(new Set(q));
-}
-
-const SCAN_TEMPLATES = [
-  {
-    scan_type: "quick_scan",
-    worker_task_type: "web.search",
-    frequency: "daily",
-    label: "Quick scan — daily multi-platform sweep",
-    buildInput: (p: ProtectionProfile) => ({
-      name: p.creatorName,
-      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
-      keywords: p.keywords,
-      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords).slice(0, 8),
-      platforms: PLATFORMS_ALL,
-      openLimit: 5,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "deep_scan",
-    worker_task_type: "web.search",
-    frequency: "weekly",
-    label: "Deep scan — full keyword matrix",
-    buildInput: (p: ProtectionProfile) => ({
-      name: p.creatorName,
-      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
-      keywords: p.keywords,
-      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords),
-      platforms: PLATFORMS_ALL,
-      openLimit: 12,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
-  {
-    scan_type: "urgent_scan",
-    worker_task_type: "web.search",
-    frequency: "once",
-    label: "Urgent scan — newly registered content",
-    buildInput: (p: ProtectionProfile) => ({
-      name: p.creatorName,
-      username: usernameFromUrl(p.officialInstagramUrl) || usernameFromUrl(p.officialYoutubeUrl),
-      keywords: p.keywords,
-      queries: baseQueries(p.creatorName, usernameFromUrl(p.officialInstagramUrl), p.keywords).slice(0, 6),
-      platforms: PLATFORMS_ALL,
-      openLimit: 6,
-      source: "content_registry",
-      assetName: p.creatorName,
-    }),
-  },
+// Browser Agent only accepts these task types. General "web scan" work is
+// split into separate youtube.investigate + instagram.investigate +
+// contact.discover jobs rather than a single web.search task.
+const ALLOWED_WORKER_TYPES = [
+  "youtube.investigate",
+  "instagram.investigate",
+  "contact.discover",
+  "email.prepare",
+  "takedown.prepare",
+  "image.reverse",
 ] as const;
 
-// Reverse-image template — only attached when we have an actual image asset.
-// The `imageUrl` is signed at dispatch time from asset.storage_path (below).
-const IMAGE_REVERSE_TEMPLATE = {
+type BuiltJob = {
+  scan_type: string;
+  worker_task_type: (typeof ALLOWED_WORKER_TYPES)[number];
+  frequency: "daily" | "weekly" | "once";
+  input: Record<string, unknown>;
+};
+
+function buildScanJobs(p: ProtectionProfile): BuiltJob[] {
+  const jobs: BuiltJob[] = [];
+  const igUser = usernameFromUrl(p.officialInstagramUrl);
+  const ytUser = usernameFromUrl(p.officialYoutubeUrl);
+
+  if (p.officialYoutubeUrl) {
+    jobs.push({
+      scan_type: "youtube_channel_scan",
+      worker_task_type: "youtube.investigate",
+      frequency: "daily",
+      input: {
+        channelUrl: p.officialYoutubeUrl,
+        name: p.creatorName,
+        keywords: p.keywords,
+        source: "content_registry",
+        assetName: p.creatorName,
+      },
+    });
+  }
+
+  if (p.officialInstagramUrl) {
+    jobs.push({
+      scan_type: "instagram_profile_scan",
+      worker_task_type: "instagram.investigate",
+      frequency: "daily",
+      input: {
+        profileUrl: p.officialInstagramUrl,
+        name: p.creatorName,
+        keywords: p.keywords,
+        source: "content_registry",
+        assetName: p.creatorName,
+      },
+    });
+  }
+
+  jobs.push({
+    scan_type: "contact_discovery",
+    worker_task_type: "contact.discover",
+    frequency: "weekly",
+    input: {
+      name: p.creatorName,
+      channelUrl: p.officialYoutubeUrl ?? undefined,
+      socialLinks: [p.officialInstagramUrl, p.officialYoutubeUrl].filter(Boolean) as string[],
+      username: igUser || ytUser,
+      keywords: p.keywords,
+      source: "content_registry",
+      assetName: p.creatorName,
+    },
+  });
+
+  return jobs;
+}
+
+// Reverse-image job — only attached when we have an actual image asset.
+// The `imageUrl` is signed at dispatch time from asset.storage_path.
+const IMAGE_REVERSE_JOB: BuiltJob = {
   scan_type: "image_reverse_daily",
-  worker_task_type: "image.reverse" as const,
-  frequency: "daily" as const,
-  label: "Reverse image search — Google Lens → Bing → Yandex",
-  buildInput: (p: ProtectionProfile) => ({
+  worker_task_type: "image.reverse",
+  frequency: "daily",
+  input: {
     providers: ["google_lens", "bing_visual", "yandex_images"],
     source: "content_registry",
-    assetName: p.creatorName,
-    // imageUrl injected at dispatch time
-  }),
+  },
 };
 
 
@@ -162,7 +155,13 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
       .single();
     if (profErr) throw new Error(profErr.message);
 
-    const templates: Array<typeof SCAN_TEMPLATES[number] | typeof IMAGE_REVERSE_TEMPLATE> = [...SCAN_TEMPLATES];
+    const built: BuiltJob[] = buildScanJobs({
+      creatorName: data.creatorName,
+      officialYoutubeUrl: data.officialYoutubeUrl,
+      officialInstagramUrl: data.officialInstagramUrl,
+      keywords: data.keywords,
+      issueTypes: data.issueTypes,
+    });
 
     // If this asset is an image, add a recurring reverse-image scan (Google Lens → Bing → Yandex).
     if (data.assetId) {
@@ -172,11 +171,14 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
         .eq("id", data.assetId)
         .maybeSingle();
       if (asset?.asset_type === "image" && asset.storage_path) {
-        templates.push(IMAGE_REVERSE_TEMPLATE);
+        built.push({
+          ...IMAGE_REVERSE_JOB,
+          input: { ...IMAGE_REVERSE_JOB.input, assetName: data.creatorName },
+        });
       }
     }
 
-    const rows = templates.map((t) => ({
+    const rows = built.map((t) => ({
       user_id: userId,
       asset_id: data.assetId ?? null,
       profile_id: profile.id,
@@ -186,13 +188,7 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
       worker_task_type: t.worker_task_type,
       frequency: t.frequency,
       status: "active",
-      config: t.buildInput({
-        creatorName: data.creatorName,
-        officialYoutubeUrl: data.officialYoutubeUrl,
-        officialInstagramUrl: data.officialInstagramUrl,
-        keywords: data.keywords,
-        issueTypes: data.issueTypes,
-      }),
+      config: t.input as any,
       next_run_at: new Date().toISOString(),
     }));
 
@@ -303,13 +299,8 @@ function validateWorkerPayload(
     if (need("imageUrl")) return { ok: false, missingField: "imageUrl", reason: `Missing required field "imageUrl" for scan "${scanType}" (image.reverse). Ensure the asset has a stored image file.` };
     return { ok: true };
   }
-  if (workerTaskType === "web.search") {
-    const hasQueries = Array.isArray(input.queries) && (input.queries as unknown[]).length > 0;
-    const hasName = typeof input.name === "string" && (input.name as string).trim().length > 0;
-    if (!hasQueries && !hasName) {
-      return { ok: false, missingField: "queries", reason: `Missing "queries" (or "name") for scan "${scanType}" (web.search).` };
-    }
-    return { ok: true };
+  if (!ALLOWED_WORKER_TYPES.includes(workerTaskType as any)) {
+    return { ok: false, missingField: "type", reason: `Invalid task type "${workerTaskType}". Allowed: ${ALLOWED_WORKER_TYPES.join(", ")}.` };
   }
   if (workerTaskType === "youtube.investigate" || workerTaskType === "instagram.investigate") {
     const urlField = workerTaskType === "youtube.investigate" ? "channelUrl" : "profileUrl";
@@ -342,6 +333,38 @@ async function buildJobInput(
   return { ...base, imageUrl: signed.signedUrl, assetId: asset.id, assetName: asset.title ?? "" };
 }
 
+// Auto-remap legacy jobs whose worker_task_type is no longer accepted
+// (e.g. old "web.search" rows created before we split scans per platform).
+async function remapLegacyJob(
+  supabase: any,
+  job: any,
+): Promise<{ type: string; input: Record<string, unknown> }> {
+  if (ALLOWED_WORKER_TYPES.includes(job.worker_task_type)) {
+    return { type: job.worker_task_type, input: (job.config ?? {}) as Record<string, unknown> };
+  }
+  const cfg = (job.config ?? {}) as Record<string, unknown>;
+  const name = (cfg.name as string) || (job.asset_name as string) || "";
+  const remapped = {
+    type: "contact.discover",
+    input: {
+      name,
+      keywords: cfg.keywords ?? [],
+      socialLinks: cfg.socialLinks ?? [],
+      username: cfg.username,
+      source: "content_registry_legacy_remap",
+      assetName: name,
+      originalType: job.worker_task_type,
+    },
+  };
+  // Persist remap so subsequent runs skip this branch.
+  await supabase
+    .from("monitoring_jobs")
+    .update({ worker_task_type: remapped.type, config: remapped.input as any })
+    .eq("id", job.id);
+  return remapped;
+}
+
+
 
 export const runMonitoringJobNow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -363,19 +386,23 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
       .eq("user_id", userId)
       .in("status", ["queued", "running", "browsing", "navigating", "extracting", "analyzing"]);
 
-    const built = await buildJobInput(supabase, job);
+    // Auto-remap legacy task types (e.g. web.search) to an allowed one.
+    const remapped = await remapLegacyJob(supabase, job);
+    const effectiveJob = { ...job, worker_task_type: remapped.type, config: remapped.input };
+
+    const built = await buildJobInput(supabase, effectiveJob);
     if ("error" in built && typeof built.error === "string") {
       return { offline: false, invalid: true, reason: built.error, missingField: "asset", queued: (activeCount ?? 0) > 0 };
     }
     const payload = built as Record<string, unknown>;
 
     // Pre-flight validation — surfaces missing fields as invalid, not offline.
-    const check = validateWorkerPayload(job.worker_task_type, job.scan_type, payload);
+    const check = validateWorkerPayload(effectiveJob.worker_task_type, effectiveJob.scan_type, payload);
     if (!check.ok) {
       return { offline: false, invalid: true, reason: check.reason, missingField: check.missingField, queued: (activeCount ?? 0) > 0 };
     }
 
-    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: payload });
+    const enq = await enqueueViaWorker({ type: effectiveJob.worker_task_type, input: payload });
 
     if (!enq.ok && enq.kind === "invalid") {
       return { offline: false, invalid: true, reason: enq.reason, status: enq.status, queued: (activeCount ?? 0) > 0 };
@@ -447,7 +474,9 @@ export const dispatchDueMonitoringJobs = createServerFn({ method: "POST" })
         .eq("user_id", userId)
         .in("status", ["queued", "running", "browsing", "navigating", "extracting", "analyzing"]);
       if ((count ?? 0) > 0) continue; // honor 1-active limit
-      const job = jobs[0];
+      const job0 = jobs[0];
+      const remapped = await remapLegacyJob(supabaseAdmin, job0);
+      const job = { ...job0, worker_task_type: remapped.type, config: remapped.input };
       const built = await buildJobInput(supabaseAdmin, job);
       if ("error" in built && typeof (built as any).error === "string") continue;
       const payload = built as Record<string, unknown>;

@@ -192,7 +192,6 @@ const TASK_TYPES = [
   "contact.discover",
   "email.prepare",
   "takedown.prepare",
-  "web.search",
   "image.reverse",
 ] as const;
 
@@ -254,7 +253,7 @@ async function persistTask(supabase: any, userId: string, task: any) {
   }, { onConflict: "user_id,worker_task_id" });
 
   // On completion of a discovery task, feed evidence into AI analysis pipeline.
-  const isDiscovery = task.type === "image.reverse" || task.type === "web.search";
+  const isDiscovery = task.type === "image.reverse";
   if (!wasCompleted && task.status === "completed" && isDiscovery) {
     try {
       const { analyzeCompletedAgentTask } = await import("./agent-analysis.server");

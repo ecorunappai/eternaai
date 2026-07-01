@@ -48,10 +48,15 @@ function MonitoringJobsPage() {
         queued?: boolean;
       };
       if (r.invalid) {
+        const isTypeError =
+          r.missingField === "type" ||
+          /invalid_enum_value|Expected '.*investigate'|received '?web\.search/i.test(r.reason ?? "");
         toast.error(
-          r.missingField
-            ? `Invalid task payload — missing "${r.missingField}": ${r.reason ?? ""}`
-            : `Invalid task payload${r.status ? ` (HTTP ${r.status})` : ""}: ${r.reason ?? ""}`,
+          isTypeError
+            ? `Invalid task type: ${r.reason ?? "worker rejected task type"}`
+            : r.missingField
+              ? `Invalid task payload — missing "${r.missingField}": ${r.reason ?? ""}`
+              : `Invalid task payload${r.status ? ` (HTTP ${r.status})` : ""}: ${r.reason ?? ""}`,
           { duration: 8000 },
         );
       } else if (r.offline) {
