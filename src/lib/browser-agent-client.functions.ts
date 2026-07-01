@@ -192,7 +192,6 @@ const TASK_TYPES = [
   "contact.discover",
   "email.prepare",
   "takedown.prepare",
-  "web.search",
   "image.reverse",
 ] as const;
 
