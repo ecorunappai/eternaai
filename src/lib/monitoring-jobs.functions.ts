@@ -299,12 +299,8 @@ function validateWorkerPayload(
     if (need("imageUrl")) return { ok: false, missingField: "imageUrl", reason: `Missing required field "imageUrl" for scan "${scanType}" (image.reverse). Ensure the asset has a stored image file.` };
     return { ok: true };
   }
-  if (workerTaskType === "web.search") {
-    const hasQueries = Array.isArray(input.queries) && (input.queries as unknown[]).length > 0;
-    const hasName = typeof input.name === "string" && (input.name as string).trim().length > 0;
-    if (!hasQueries && !hasName) {
-      return { ok: false, missingField: "queries", reason: `Missing "queries" (or "name") for scan "${scanType}" (web.search).` };
-    }
+  if (workerTaskType === "image.reverse") {
+    if (need("imageUrl")) return { ok: false, missingField: "imageUrl", reason: `Missing required field "imageUrl" for scan "${scanType}" (image.reverse). Ensure the asset has a stored image file.` };
     return { ok: true };
   }
   if (workerTaskType === "youtube.investigate" || workerTaskType === "instagram.investigate") {
