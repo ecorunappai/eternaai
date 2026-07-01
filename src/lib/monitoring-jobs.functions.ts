@@ -162,7 +162,21 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
       .single();
     if (profErr) throw new Error(profErr.message);
 
-    const rows = SCAN_TEMPLATES.map((t) => ({
+    const templates: Array<typeof SCAN_TEMPLATES[number] | typeof IMAGE_REVERSE_TEMPLATE> = [...SCAN_TEMPLATES];
+
+    // If this asset is an image, add a recurring reverse-image scan (Google Lens → Bing → Yandex).
+    if (data.assetId) {
+      const { data: asset } = await supabase
+        .from("assets")
+        .select("asset_type,storage_path")
+        .eq("id", data.assetId)
+        .maybeSingle();
+      if (asset?.asset_type === "image" && asset.storage_path) {
+        templates.push(IMAGE_REVERSE_TEMPLATE);
+      }
+    }
+
+    const rows = templates.map((t) => ({
       user_id: userId,
       asset_id: data.assetId ?? null,
       profile_id: profile.id,
@@ -184,6 +198,7 @@ export const setupAssetMonitoring = createServerFn({ method: "POST" })
 
     const { error: jobErr } = await supabase.from("monitoring_jobs").insert(rows);
     if (jobErr) throw new Error(jobErr.message);
+
 
     return { profileId: profile.id, jobsCreated: rows.length };
   });
