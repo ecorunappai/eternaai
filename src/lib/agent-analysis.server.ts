@@ -154,14 +154,16 @@ export async function analyzeCompletedAgentTask(
       user_id: userId,
       asset_id: assetId as string,
       match_id: r.id,
-      source_url: r.source_url,
-      stage: r.result_category === "takedown" ? "takedown_ready" : "warning_ready",
-      status: "draft",
-      priority: r.risk_level === "critical" ? "urgent" : r.risk_level === "high" ? "high" : "normal",
+      target_url: r.source_url,
+      platform: r.platform ?? null,
+      risk_level: r.risk_level,
+      status: r.result_category === "takedown" ? "takedown_ready" : "warning_ready",
+      notes: `Auto-drafted from ${task.type} — action=${r.result_category}`,
     }));
     const { error: caseErr } = await supabase.from("enforcement_cases").insert(caseRows);
     if (caseErr) console.warn("insert enforcement_cases", caseErr.message);
   }
+
 
   // Mark the task as analyzed to prevent duplicate runs.
   await supabase
