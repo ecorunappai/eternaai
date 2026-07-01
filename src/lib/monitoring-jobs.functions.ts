@@ -313,8 +313,11 @@ export const runMonitoringJobNow = createServerFn({ method: "POST" })
       .in("status", ["queued", "running", "browsing", "navigating", "extracting", "analyzing"]);
 
     const built = await buildJobInput(supabase, job);
-    if ("error" in built) return { offline: true, reason: built.error };
-    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: built });
+    if ("error" in built && typeof built.error === "string") {
+      return { offline: true, reason: built.error, queued: (activeCount ?? 0) > 0 };
+    }
+    const enq = await enqueueViaWorker({ type: job.worker_task_type, input: built as Record<string, unknown> });
+
 
 
     if (enq.offline) {
