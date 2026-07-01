@@ -83,6 +83,22 @@ const SCAN_TEMPLATES = [
   },
 ] as const;
 
+// Reverse-image template — only attached when we have an actual image asset.
+// The `imageUrl` is signed at dispatch time from asset.storage_path (below).
+const IMAGE_REVERSE_TEMPLATE = {
+  scan_type: "image_reverse_daily",
+  worker_task_type: "image.reverse" as const,
+  frequency: "daily" as const,
+  label: "Reverse image search — Google Lens → Bing → Yandex",
+  buildInput: (p: ProtectionProfile) => ({
+    providers: ["google_lens", "bing_visual", "yandex_images"],
+    source: "content_registry",
+    assetName: p.creatorName,
+    // imageUrl injected at dispatch time
+  }),
+};
+
+
 function usernameFromUrl(u?: string | null): string | undefined {
   if (!u) return undefined;
   try {
