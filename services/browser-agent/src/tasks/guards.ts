@@ -18,8 +18,11 @@ export type GuardResult = { ok: true } | { ok: false; reason: string };
 export async function guardPublicPage(page: Page): Promise<GuardResult> {
   try {
     const url = page.url();
-    // Cookie consent interstitials are NOT login walls — handled separately
-    // in tasks/consent.ts. Only block on real auth pages.
+    // Cookie consent interstitials are NEVER login walls — handled separately
+    // in tasks/consent.ts. Short-circuit so we don't read body text either.
+    if (/consent\.(youtube|google)\./i.test(url)) {
+      return { ok: true };
+    }
     if (/\/login\b|\/accounts\/login|accounts\.google\.com\/(?:v3\/)?signin/i.test(url)) {
       return { ok: false, reason: `Redirected to login wall: ${url}` };
     }
@@ -31,3 +34,4 @@ export async function guardPublicPage(page: Page): Promise<GuardResult> {
     return { ok: false, reason: `Guard error: ${(e as Error).message}` };
   }
 }
+
