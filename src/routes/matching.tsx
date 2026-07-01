@@ -91,7 +91,7 @@ function Matching() {
         <div className="mb-3 flex items-center gap-2">
           <ScanSearch className="h-4 w-4 text-primary" />
           <h2 className="text-sm font-semibold">Run Reverse-Image Scan</h2>
-          <span className="text-xs text-muted-foreground">Live: Google Lens via Firecrawl · saves only AI-verified matches</span>
+          <span className="text-xs text-muted-foreground">Live: Google Lens via Bright Data · saves only AI-verified matches</span>
         </div>
         {assets.length === 0 ? (
           <p className="text-sm text-muted-foreground">Register content first to enable matching.</p>
