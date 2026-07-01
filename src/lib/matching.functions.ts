@@ -279,7 +279,7 @@ export const runRealMatchingScan = createServerFn({ method: "POST" })
 
     // Long-lived signed URL so the Browser Agent (and each search provider it opens) can fetch the image.
     const { data: signed, error: sErr } = await supabase.storage
-      .from("assets").createSignedUrl(asset.storage_path, 60 * 60 * 24 * 7);
+      .from("assets").createSignedUrl(asset.storage_path!, 60 * 60 * 24 * 7);
     if (sErr || !signed?.signedUrl) throw new Error("Could not sign asset URL");
 
 
