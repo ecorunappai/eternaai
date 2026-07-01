@@ -24,6 +24,9 @@ export async function runYouTube(ctx: RunCtx, input: any) {
     patchTask(taskId, { status: "navigating", nextAction: "Opening YouTube" });
     await page.goto("https://www.youtube.com/", { waitUntil: "commit", timeout: NAV_TIMEOUT }).catch(() => {});
     await page.waitForTimeout(1500);
+    if (await handleConsent(page, "https://www.youtube.com/")) {
+      appendStep(taskId, { phase: "navigating", url: page.url(), note: "Accepted YouTube cookie consent" });
+    }
     const openShot = await snapshot(page, taskId, evidenceDir, publicBaseUrl, "open_youtube");
     appendStep(taskId, { phase: "navigating", url: page.url(), note: "Opened YouTube", screenshot: openShot });
 
