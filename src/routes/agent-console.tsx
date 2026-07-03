@@ -426,7 +426,7 @@ function AgentConsolePage() {
           token_missing:   { title: "Bearer token missing",  hint: "BROWSER_AGENT_TOKEN secret is empty. Generate one with `openssl rand -hex 32`.",            tone: "amber" },
           unauthorized:    { title: "Token rejected",        hint: "The bearer token in Eterna doesn't match the worker's BROWSER_AGENT_TOKEN env var.",       tone: "destructive" },
           launch_failed:   { title: "Launch failed",         hint: "Worker is up but Playwright couldn't open a browser. Check `docker logs eterna-browser-agent`.", tone: "destructive" },
-          timeout:         { title: "Agent unreachable",     hint: "Health probe timed out after 5s. Check VPS firewall, Caddy, and that port 8090 is exposed.", tone: "destructive" },
+          timeout:         { title: "Agent starting slowly",  hint: "Health probe timed out after 15s. Try again, or check VPS firewall, Caddy, and that port 8090 is exposed.", tone: "destructive" },
           unreachable:     { title: "Agent unreachable",     hint: "DNS or TCP failure. Confirm BROWSER_AGENT_URL points to your VPS and the container is running.", tone: "destructive" },
           http_error:      { title: "Unexpected response",   hint: agentOnline.reason ?? "Worker returned a non-2xx status.",                                   tone: "destructive" },
           probe_failed:    { title: "Probe failed",          hint: "Status check threw client-side. Try Test connection.",                                     tone: "amber" },
