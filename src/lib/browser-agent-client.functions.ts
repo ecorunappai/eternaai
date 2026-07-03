@@ -35,7 +35,7 @@ async function callAgent<T>(path: string, body: unknown): Promise<
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(45000),
+      signal: AbortSignal.timeout(AGENT_TASK_TIMEOUT_MS),
     });
     if (!res.ok) {
       return { offline: true, reason: `Agent HTTP ${res.status}` };
@@ -43,7 +43,7 @@ async function callAgent<T>(path: string, body: unknown): Promise<
     const data = (await res.json()) as T;
     return { offline: false, data };
   } catch (e) {
-    return { offline: true, reason: (e as Error).message };
+    return { offline: true, reason: timeoutReason(e) };
   }
 }
 
@@ -78,9 +78,9 @@ export const browserAgentStatus = createServerFn({ method: "GET" })
       }
       return { online: false, configured: true, code: "http_error" as const, reason: `HTTP ${res.status}`, latencyMs };
     } catch (e) {
-      const msg = timeoutReason(e);
-      const code = /timeout|aborted/i.test(msg) ? ("timeout" as const) : ("unreachable" as const);
-      return { online: false, configured: true, code, reason: msg };
+      const rawMsg = (e as Error).message || "network error";
+      const code = /timeout|aborted|abort/i.test(rawMsg) ? ("timeout" as const) : ("unreachable" as const);
+      return { online: false, configured: true, code, reason: timeoutReason(e) };
     }
   });
 
