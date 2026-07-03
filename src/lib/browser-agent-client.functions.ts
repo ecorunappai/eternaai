@@ -11,6 +11,17 @@ function agentConfig() {
   return { baseUrl, token, configured: Boolean(baseUrl) };
 }
 
+const AGENT_HEALTH_TIMEOUT_MS = 15_000;
+const AGENT_TASK_TIMEOUT_MS = 45_000;
+const AGENT_LIVE_FRAME_TIMEOUT_MS = 15_000;
+
+function timeoutReason(error: unknown, fallback = "network error") {
+  const msg = (error as Error)?.message || fallback;
+  return /timeout|aborted|abort/i.test(msg)
+    ? "Browser Agent timed out while starting or responding. Try again in a few seconds."
+    : msg;
+}
+
 async function callAgent<T>(path: string, body: unknown): Promise<
   { offline: true; reason: string } | { offline: false; data: T }
 > {
@@ -51,7 +62,7 @@ export const browserAgentStatus = createServerFn({ method: "GET" })
       const t0 = Date.now();
       const res = await fetch(`${baseUrl!.replace(/\/$/, "")}/health`, {
         headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(AGENT_HEALTH_TIMEOUT_MS),
       });
       const latencyMs = Date.now() - t0;
       if (res.ok) {
@@ -67,7 +78,7 @@ export const browserAgentStatus = createServerFn({ method: "GET" })
       }
       return { online: false, configured: true, code: "http_error" as const, reason: `HTTP ${res.status}`, latencyMs };
     } catch (e) {
-      const msg = (e as Error).message || "network error";
+      const msg = timeoutReason(e);
       const code = /timeout|aborted/i.test(msg) ? ("timeout" as const) : ("unreachable" as const);
       return { online: false, configured: true, code, reason: msg };
     }
@@ -209,7 +220,7 @@ async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(init.headers ?? {}),
       },
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(AGENT_TASK_TIMEOUT_MS),
     });
     if (!res.ok) {
       // Surface the exact worker error body — a 400 means invalid payload,
@@ -223,7 +234,7 @@ async function rawAgent<T>(path: string, init: RequestInit = {}): Promise<
     }
     return { offline: false, data: (await res.json()) as T };
   } catch (e) {
-    return { offline: true, reason: (e as Error).message };
+    return { offline: true, reason: timeoutReason(e) };
   }
 }
 
@@ -339,7 +350,7 @@ export const getAgentLiveFrame = createServerFn({ method: "POST" })
         `${baseUrl!.replace(/\/$/, "")}/tasks/${encodeURIComponent(data.workerTaskId)}/live`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(AGENT_LIVE_FRAME_TIMEOUT_MS),
         },
       );
       if (!res.ok) return { offline: true as const, reason: `HTTP ${res.status}` };
@@ -365,6 +376,6 @@ export const getAgentLiveFrame = createServerFn({ method: "POST" })
         dataUrl: `data:${body.mime ?? "image/png"};base64,${body.image}`,
       };
     } catch (e) {
-      return { offline: true as const, reason: (e as Error).message };
+      return { offline: true as const, reason: timeoutReason(e) };
     }
   });
