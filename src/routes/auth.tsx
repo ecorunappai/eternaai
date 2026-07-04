@@ -8,12 +8,16 @@ import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "Sign in — Eterna AI" }] }),
+  validateSearch: (s: Record<string, unknown>) => ({
+    next: typeof s.next === "string" && s.next.startsWith("/") ? s.next : "",
+  }),
   component: AuthPage,
 });
 
 function AuthPage() {
   const nav = useNavigate();
   const { user, loading } = useAuth();
+  const { next } = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,18 +25,24 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) nav({ to: "/" });
-  }, [user, loading, nav]);
+    if (!loading && user) {
+      if (next) window.location.replace(next);
+      else nav({ to: "/" });
+    }
+  }, [user, loading, nav, next]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
+      const returnTo = next
+        ? `${window.location.origin}${next}`
+        : window.location.origin;
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { emailRedirectTo: window.location.origin, data: { full_name: name } },
+          options: { emailRedirectTo: returnTo, data: { full_name: name } },
         });
         if (error) throw error;
         toast.success("Account created. Check your email if confirmation is required.");
@@ -49,12 +59,16 @@ function AuthPage() {
 
   async function google() {
     setBusy(true);
-    const res = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    const redirect_uri = next
+      ? `${window.location.origin}${next}`
+      : window.location.origin;
+    const res = await lovable.auth.signInWithOAuth("google", { redirect_uri });
     if (res.error) {
       toast.error((res.error as Error).message ?? "Google sign-in failed");
       setBusy(false);
     }
   }
+
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-background">

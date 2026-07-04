@@ -16,6 +16,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as MonitoringJobsRouteImport } from './routes/monitoring-jobs'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MatchingRouteImport } from './routes/matching'
 import { Route as IdentityRouteImport } from './routes/identity'
 import { Route as EnforcementRouteImport } from './routes/enforcement'
@@ -29,7 +30,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as VerifyCertIdRouteImport } from './routes/verify.$certId'
 import { Route as ApiSearchRouteImport } from './routes/api/search'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
+import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as ApiPublicYoutubeOauthCallbackRouteImport } from './routes/api/public/youtube-oauth-callback'
+import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as ApiPublicHooksDispatchMonitoringRouteImport } from './routes/api/public/hooks/dispatch-monitoring'
 
 const YoutubeRoute = YoutubeRouteImport.update({
@@ -65,6 +70,11 @@ const MonitoringJobsRoute = MonitoringJobsRouteImport.update({
 const MonitoringRoute = MonitoringRouteImport.update({
   id: '/monitoring',
   path: '/monitoring',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MatchingRoute = MatchingRouteImport.update({
@@ -132,12 +142,35 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char91DotmcpChar93ListToolsRoute =
+  Char91DotmcpChar93ListToolsRouteImport.update({
+    id: '/.mcp/list-tools',
+    path: '/.mcp/list-tools',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicYoutubeOauthCallbackRoute =
   ApiPublicYoutubeOauthCallbackRouteImport.update({
     id: '/api/public/youtube-oauth-callback',
     path: '/api/public/youtube-oauth-callback',
     getParentRoute: () => rootRouteImport,
   } as any)
+const Char91DotmcpChar93InvokeToolToolRoute =
+  Char91DotmcpChar93InvokeToolToolRouteImport.update({
+    id: '/.mcp/invoke-tool/$tool',
+    path: '/.mcp/invoke-tool/$tool',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksDispatchMonitoringRoute =
   ApiPublicHooksDispatchMonitoringRouteImport.update({
     id: '/api/public/hooks/dispatch-monitoring',
@@ -156,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
+  '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
@@ -163,9 +197,13 @@ export interface FileRoutesByFullPath {
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
   '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
@@ -180,6 +218,7 @@ export interface FileRoutesByTo {
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
+  '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
@@ -187,9 +226,13 @@ export interface FileRoutesByTo {
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
   '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
@@ -205,6 +248,7 @@ export interface FileRoutesById {
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
   '/matching': typeof MatchingRoute
+  '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
@@ -212,9 +256,13 @@ export interface FileRoutesById {
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
+  '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
   '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
 }
@@ -231,6 +279,7 @@ export interface FileRouteTypes {
     | '/enforcement'
     | '/identity'
     | '/matching'
+    | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
     | '/registry'
@@ -238,9 +287,13 @@ export interface FileRouteTypes {
     | '/takedown'
     | '/violations'
     | '/youtube'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/api/public/youtube-oauth-callback'
     | '/api/public/hooks/dispatch-monitoring'
   fileRoutesByTo: FileRoutesByTo
@@ -255,6 +308,7 @@ export interface FileRouteTypes {
     | '/enforcement'
     | '/identity'
     | '/matching'
+    | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
     | '/registry'
@@ -262,9 +316,13 @@ export interface FileRouteTypes {
     | '/takedown'
     | '/violations'
     | '/youtube'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/api/public/youtube-oauth-callback'
     | '/api/public/hooks/dispatch-monitoring'
   id:
@@ -279,6 +337,7 @@ export interface FileRouteTypes {
     | '/enforcement'
     | '/identity'
     | '/matching'
+    | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
     | '/registry'
@@ -286,9 +345,13 @@ export interface FileRouteTypes {
     | '/takedown'
     | '/violations'
     | '/youtube'
+    | '/.mcp/list-tools'
+    | '/.well-known/oauth-protected-resource'
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
+    | '/.lovable/oauth/consent'
+    | '/.mcp/invoke-tool/$tool'
     | '/api/public/youtube-oauth-callback'
     | '/api/public/hooks/dispatch-monitoring'
   fileRoutesById: FileRoutesById
@@ -304,6 +367,7 @@ export interface RootRouteChildren {
   EnforcementRoute: typeof EnforcementRoute
   IdentityRoute: typeof IdentityRoute
   MatchingRoute: typeof MatchingRoute
+  McpRoute: typeof McpRoute
   MonitoringRoute: typeof MonitoringRoute
   MonitoringJobsRoute: typeof MonitoringJobsRoute
   RegistryRoute: typeof RegistryRoute
@@ -311,9 +375,13 @@ export interface RootRouteChildren {
   TakedownRoute: typeof TakedownRoute
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
+  Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiSearchRoute: typeof ApiSearchRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
+  Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiPublicYoutubeOauthCallbackRoute: typeof ApiPublicYoutubeOauthCallbackRoute
   ApiPublicHooksDispatchMonitoringRoute: typeof ApiPublicHooksDispatchMonitoringRoute
 }
@@ -367,6 +435,13 @@ declare module '@tanstack/react-router' {
       path: '/monitoring'
       fullPath: '/monitoring'
       preLoaderRoute: typeof MonitoringRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/matching': {
@@ -460,11 +535,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/list-tools': {
+      id: '/.mcp/list-tools'
+      path: '/.mcp/list-tools'
+      fullPath: '/.mcp/list-tools'
+      preLoaderRoute: typeof Char91DotmcpChar93ListToolsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/youtube-oauth-callback': {
       id: '/api/public/youtube-oauth-callback'
       path: '/api/public/youtube-oauth-callback'
       fullPath: '/api/public/youtube-oauth-callback'
       preLoaderRoute: typeof ApiPublicYoutubeOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.mcp/invoke-tool/$tool': {
+      id: '/.mcp/invoke-tool/$tool'
+      path: '/.mcp/invoke-tool/$tool'
+      fullPath: '/.mcp/invoke-tool/$tool'
+      preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/hooks/dispatch-monitoring': {
@@ -488,6 +591,7 @@ const rootRouteChildren: RootRouteChildren = {
   EnforcementRoute: EnforcementRoute,
   IdentityRoute: IdentityRoute,
   MatchingRoute: MatchingRoute,
+  McpRoute: McpRoute,
   MonitoringRoute: MonitoringRoute,
   MonitoringJobsRoute: MonitoringJobsRoute,
   RegistryRoute: RegistryRoute,
@@ -495,12 +599,27 @@ const rootRouteChildren: RootRouteChildren = {
   TakedownRoute: TakedownRoute,
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
+  Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
   ApiChatRoute: ApiChatRoute,
   ApiSearchRoute: ApiSearchRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
+  Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiPublicYoutubeOauthCallbackRoute: ApiPublicYoutubeOauthCallbackRoute,
   ApiPublicHooksDispatchMonitoringRoute: ApiPublicHooksDispatchMonitoringRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
