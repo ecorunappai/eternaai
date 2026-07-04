@@ -34,6 +34,7 @@ import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } fr
 import { Route as Char91DotmcpChar93ListToolsRouteImport } from './routes/[.mcp]/list-tools'
 import { Route as ApiPublicYoutubeOauthCallbackRouteImport } from './routes/api/public/youtube-oauth-callback'
 import { Route as Char91DotmcpChar93InvokeToolToolRouteImport } from './routes/[.mcp]/invoke-tool/$tool'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as ApiPublicHooksDispatchMonitoringRouteImport } from './routes/api/public/hooks/dispatch-monitoring'
 
 const YoutubeRoute = YoutubeRouteImport.update({
@@ -165,6 +166,11 @@ const Char91DotmcpChar93InvokeToolToolRoute =
     path: '/.mcp/invoke-tool/$tool',
     getParentRoute: () => rootRouteImport,
   } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksDispatchMonitoringRoute =
   ApiPublicHooksDispatchMonitoringRouteImport.update({
     id: '/api/public/hooks/dispatch-monitoring',
@@ -196,6 +202,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
   '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
@@ -224,6 +231,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
   '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
@@ -253,6 +261,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/api/search': typeof ApiSearchRoute
   '/verify/$certId': typeof VerifyCertIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/.mcp/invoke-tool/$tool': typeof Char91DotmcpChar93InvokeToolToolRoute
   '/api/public/youtube-oauth-callback': typeof ApiPublicYoutubeOauthCallbackRoute
   '/api/public/hooks/dispatch-monitoring': typeof ApiPublicHooksDispatchMonitoringRoute
@@ -283,6 +292,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/api/public/youtube-oauth-callback'
     | '/api/public/hooks/dispatch-monitoring'
@@ -311,6 +321,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/api/public/youtube-oauth-callback'
     | '/api/public/hooks/dispatch-monitoring'
@@ -339,6 +350,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/api/search'
     | '/verify/$certId'
+    | '/.lovable/oauth/consent'
     | '/.mcp/invoke-tool/$tool'
     | '/api/public/youtube-oauth-callback'
     | '/api/public/hooks/dispatch-monitoring'
@@ -368,6 +380,7 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiSearchRoute: typeof ApiSearchRoute
   VerifyCertIdRoute: typeof VerifyCertIdRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
   Char91DotmcpChar93InvokeToolToolRoute: typeof Char91DotmcpChar93InvokeToolToolRoute
   ApiPublicYoutubeOauthCallbackRoute: typeof ApiPublicYoutubeOauthCallbackRoute
   ApiPublicHooksDispatchMonitoringRoute: typeof ApiPublicHooksDispatchMonitoringRoute
@@ -550,6 +563,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91DotmcpChar93InvokeToolToolRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/dispatch-monitoring': {
       id: '/api/public/hooks/dispatch-monitoring'
       path: '/api/public/hooks/dispatch-monitoring'
@@ -585,6 +605,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiSearchRoute: ApiSearchRoute,
   VerifyCertIdRoute: VerifyCertIdRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
   Char91DotmcpChar93InvokeToolToolRoute: Char91DotmcpChar93InvokeToolToolRoute,
   ApiPublicYoutubeOauthCallbackRoute: ApiPublicYoutubeOauthCallbackRoute,
   ApiPublicHooksDispatchMonitoringRoute: ApiPublicHooksDispatchMonitoringRoute,
