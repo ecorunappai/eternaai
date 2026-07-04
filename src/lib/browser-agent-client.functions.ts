@@ -280,7 +280,7 @@ export const enqueueAgentTask = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({
     type: z.enum(TASK_TYPES),
-    input: z.record(z.any()).default({}),
+    input: z.record(z.string(), z.any()).default({}),
     caseId: z.string().uuid().optional(),
   }).parse(d))
   .handler(async ({ data, context }) => {
