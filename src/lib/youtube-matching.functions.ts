@@ -55,9 +55,11 @@ function decodeHtml(value: string): string {
 
 // English keyword pool. Each query becomes `${subject} ${suffix}`.
 const ENGLISH_SUFFIXES = [
-  "", "reaction", "troll", "issue", "controversy", "exposed", "viral", "roast",
-  "news", "latest issue", "family issue", "interview reaction", "shorts",
-  "reels reaction", "fan video", "edit", "fake news", "leaked", "scandal",
+  "", "reaction", "troll", "issue", "controversy", "expose", "exposed",
+  "defame", "defamation", "defamatory", "viral", "roast", "insult",
+  "harassment", "abuse", "news", "latest issue", "family issue",
+  "interview reaction", "shorts", "reels reaction", "fan video", "edit",
+  "fake news", "leaked", "scandal", "morphed", "deepfake",
   "Malayalam troll", "Malayalam reaction", "Tamil reaction", "Tamil troll",
   "Hindi reaction", "Hindi news",
 ];
@@ -80,9 +82,11 @@ function expandQueries(subject: string): string[] {
 
 // Risk keyword scoring on the title+channel.
 const RISK_KEYWORDS: Record<string, number> = {
-  reaction: 14, troll: 18, roast: 16, exposed: 22, scandal: 22, leaked: 24,
+  reaction: 14, troll: 18, roast: 16, expose: 22, exposed: 22,
+  defame: 24, defamation: 24, defamatory: 24, scandal: 22, leaked: 24,
   controversy: 18, "fake news": 20, deepfake: 26, "ai generated": 22,
-  "ai-generated": 22, viral: 8, issue: 12, "full video": 18, original: 10,
+  "ai-generated": 22, morphed: 24, insult: 16, harassment: 20, abuse: 18,
+  viral: 8, issue: 12, "full video": 18, original: 10,
   reupload: 22, repost: 18, news: 6, edit: 6, "fan page": 6, fanclub: 6,
   meme: 10, "without permission": 24, uncensored: 22, private: 18, nude: 28,
   shorts: 4, reel: 4, reels: 4,
@@ -102,7 +106,7 @@ function textSignalScore(title: string, channel: string, subject: string): numbe
 function categorizeFromTitle(title: string, channel: string): { category: string; fairUse: string; risk: string } {
   const t = `${title} ${channel}`.toLowerCase();
   if (/(deepfake|ai generated|ai-generated|fake video)/.test(t)) return { category: "deepfake_ai_misuse", fairUse: "high_confidence_unauthorized", risk: "Deepfake / AI Misuse" };
-  if (/(exposed|scandal|leaked|nude|private)/.test(t)) return { category: "defamatory_content", fairUse: "defamation_risk", risk: "Defamation Risk" };
+  if (/(expose|exposed|defame|defamation|defamatory|scandal|leaked|nude|private|insult|harassment|abuse)/.test(t)) return { category: "defamatory_content", fairUse: "defamation_risk", risk: "Defamation Risk" };
   if (/(troll|roast|meme)/.test(t) || /ട്രോൾ/.test(title)) return { category: "defamatory_content", fairUse: "needs_legal_review", risk: "Troll Video" };
   if (/(reaction|reacts|reacting|commentary|review)/.test(t) || /റിയാക്ഷൻ/.test(title)) return { category: "reaction_video", fairUse: "possible_fair_use", risk: "Reaction Video" };
   if (/(news|വാർത്ത)/.test(t)) return { category: "defamatory_content", fairUse: "needs_legal_review", risk: "News Video" };
@@ -178,6 +182,8 @@ async function firecrawlHtml(apiKey: string, url: string, waitFor = 3500): Promi
   });
   if (!r.ok) {
     const t = await r.text().catch(() => "");
+    if (r.status === 402) throw new Error("Firecrawl credits are exhausted or billing is inactive. Top up/upgrade Firecrawl, then reconnect the Firecrawl connector and run the scan again.");
+    if (r.status === 401 || r.status === 403) throw new Error("Firecrawl rejected the API key. Reconnect the Firecrawl connector with the latest key, then run the scan again.");
     throw new Error(`Firecrawl ${r.status}: ${t.slice(0, 200)}`);
   }
   const j: any = await r.json();
@@ -242,6 +248,8 @@ export const runYouTubeScan = createServerFn({ method: "POST" })
     const candidates = Array.from(allCandidates.values()).slice(0, 60);
 
     if (candidates.length === 0) {
+      const firecrawlConfigError = errors.find((err) => /Firecrawl credits|Firecrawl rejected|Firecrawl 40[123]/i.test(err));
+      if (firecrawlConfigError) throw new Error(firecrawlConfigError.replace(/^.*?: /, ""));
       return {
         inserted: 0, query: subject,
         note: `No YouTube results from ${chosen.length} keyword variants for "${subject}". ${errors[0] ?? "YouTube/Google may be temporarily blocking the scrape."}`,
