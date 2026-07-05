@@ -12,8 +12,14 @@ const ScanInput = z.object({
   query: z.string().trim().min(2).max(120),
 });
 
-// Suffix set requested by Eterna ops — covers the most common abuse vectors.
-const SUFFIXES = ["", "latest", "viral", "troll", "reaction", "expose", "controversy"];
+// Suffix set requested by Eterna ops — covers exposure, defamation and impersonation vectors.
+const SUFFIXES = [
+  "", "latest", "viral", "troll", "reaction", "expose", "exposed", "defame",
+  "defamation", "defamatory", "controversy", "scandal", "leaked", "fake",
+  "deepfake", "morphed", "roast", "insult", "harassment", "abuse",
+];
+
+const RISK_QUERY = SUFFIXES.filter(Boolean).join(" OR ");
 
 type PlatformDef = {
   id: string;            // canonical platform label stored in DB
@@ -29,49 +35,51 @@ type PlatformDef = {
 const PLATFORMS: PlatformDef[] = [
   {
     id: "Instagram", label: "Instagram", domain: "instagram.com", matchType: "instagram_post",
-    buildQuery: (s) => `site:instagram.com "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    buildQuery: (s) => `site:instagram.com "${s}" (${RISK_QUERY})`,
     urlFilter: (u) => /(^|\.)instagram\.com\//i.test(u),
   },
   {
     id: "Facebook", label: "Facebook", domain: "facebook.com", matchType: "facebook_post",
-    buildQuery: (s) => `site:facebook.com "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    buildQuery: (s) => `site:facebook.com "${s}" (${RISK_QUERY})`,
     urlFilter: (u) => /(^|\.)facebook\.com\//i.test(u),
   },
   {
     id: "TikTok", label: "TikTok", domain: "tiktok.com", matchType: "tiktok_post",
-    buildQuery: (s) => `site:tiktok.com "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    buildQuery: (s) => `site:tiktok.com "${s}" (${RISK_QUERY})`,
     urlFilter: (u) => /(^|\.)tiktok\.com\//i.test(u),
   },
   {
     id: "X", label: "X / Twitter", domain: "x.com", matchType: "x_post",
-    buildQuery: (s) => `(site:x.com OR site:twitter.com) "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    buildQuery: (s) => `(site:x.com OR site:twitter.com) "${s}" (${RISK_QUERY})`,
     urlFilter: (u) => /(^|\.)(x|twitter)\.com\//i.test(u),
   },
   {
     id: "Reddit", label: "Reddit", domain: "reddit.com", matchType: "reddit_post",
-    buildQuery: (s) => `site:reddit.com "${s}" (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    buildQuery: (s) => `site:reddit.com "${s}" (${RISK_QUERY})`,
     urlFilter: (u) => /(^|\.)reddit\.com\//i.test(u),
   },
   {
     id: "Website", label: "Website", domain: "", matchType: "website",
-    buildQuery: (s) => `"${s}" (${SUFFIXES.filter(Boolean).join(" OR ")}) -site:youtube.com -site:instagram.com -site:facebook.com -site:tiktok.com -site:x.com -site:twitter.com -site:reddit.com`,
+    buildQuery: (s) => `"${s}" (${RISK_QUERY}) -site:youtube.com -site:instagram.com -site:facebook.com -site:tiktok.com -site:x.com -site:twitter.com -site:reddit.com`,
     urlFilter: (u) => /^https?:\/\//i.test(u),
   },
   {
     id: "News", label: "News", domain: "", matchType: "news_article",
-    buildQuery: (s) => `"${s}" news (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    buildQuery: (s) => `"${s}" news (${RISK_QUERY})`,
     urlFilter: (u) => /^https?:\/\//i.test(u),
   },
   {
     id: "Blog", label: "Blog", domain: "", matchType: "blog_post",
-    buildQuery: (s) => `"${s}" blog (${SUFFIXES.filter(Boolean).join(" OR ")})`,
+    buildQuery: (s) => `"${s}" blog (${RISK_QUERY})`,
     urlFilter: (u) => /^https?:\/\//i.test(u),
   },
 ];
 
 const RISK_KEYWORDS: Record<string, number> = {
-  expose: 22, exposed: 22, troll: 18, controversy: 18, leaked: 24, scandal: 22,
+  expose: 22, exposed: 22, defame: 24, defamation: 24, defamatory: 24,
+  troll: 18, controversy: 18, leaked: 24, scandal: 22,
   reaction: 14, roast: 16, viral: 8, "fake news": 20, deepfake: 26,
+  morphed: 24, fake: 12, insult: 16, harassment: 20, abuse: 18,
   reupload: 22, repost: 18, latest: 6, news: 6, nude: 28, uncensored: 22,
 };
 
@@ -87,7 +95,7 @@ function scoreText(title: string, snippet: string, subject: string): number {
 function classify(title: string, snippet: string): { category: string; fairUse: string } {
   const t = `${title} ${snippet}`.toLowerCase();
   if (/(deepfake|ai[- ]generated|fake video)/.test(t)) return { category: "deepfake_ai_misuse", fairUse: "high_confidence_unauthorized" };
-  if (/(expose|scandal|leaked|nude|private)/.test(t)) return { category: "defamatory_content", fairUse: "defamation_risk" };
+  if (/(expose|exposed|defame|defamation|defamatory|scandal|leaked|nude|private|insult|harassment|abuse)/.test(t)) return { category: "defamatory_content", fairUse: "defamation_risk" };
   if (/(troll|roast|meme)/.test(t)) return { category: "defamatory_content", fairUse: "needs_legal_review" };
   if (/(reaction|reacts|review|commentary)/.test(t)) return { category: "reaction_video", fairUse: "possible_fair_use" };
   if (/(news|article|controversy)/.test(t)) return { category: "defamatory_content", fairUse: "needs_legal_review" };
@@ -115,6 +123,17 @@ function profileUrlFor(platform: string, url: string): string | null {
 
 type SearchHit = { url: string; title: string; description?: string; preview?: string | null; createdAt?: string | null; engine?: string };
 
+async function readFirecrawlError(response: Response): Promise<string> {
+  const body = await response.text().catch(() => "");
+  if (response.status === 402) {
+    return "Firecrawl credits are exhausted or billing is inactive. Top up/upgrade Firecrawl, then reconnect the Firecrawl connector and run the scan again.";
+  }
+  if (response.status === 401 || response.status === 403) {
+    return "Firecrawl rejected the API key. Reconnect the Firecrawl connector with the latest key, then run the scan again.";
+  }
+  return `Firecrawl search failed (${response.status}): ${body.slice(0, 300) || response.statusText}`;
+}
+
 // SearXNG (self-hosted) — primary discovery source. See /services/README.md.
 async function searxngSearch(baseUrl: string, bearer: string | undefined, query: string, limit = 10, timeRange: "month" | "" = "month"): Promise<SearchHit[]> {
   try {
@@ -141,32 +160,31 @@ async function searxngSearch(baseUrl: string, bearer: string | undefined, query:
 }
 
 async function firecrawlSearch(apiKey: string, query: string, limit = 10): Promise<SearchHit[]> {
-  try {
-    const r = await fetch("https://api.firecrawl.dev/v2/search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      // tbs: qdr:m -> Google "past month" filter for fresher results.
-      body: JSON.stringify({ query, limit, sources: ["web", "news"], tbs: "qdr:m" }),
-    });
-    if (!r.ok) return [];
-    const j: any = await r.json();
-    const data = j?.data ?? j;
-    const out: SearchHit[] = [];
-    const push = (arr: any[]) => {
-      for (const it of arr ?? []) {
-        if (!it?.url) continue;
-        out.push({
-          url: it.url,
-          title: String(it.title ?? it.url),
-          description: String(it.description ?? it.snippet ?? ""),
-          createdAt: it.date ?? it.publishedDate ?? null,
-        });
-      }
-    };
-    if (Array.isArray(data)) push(data);
-    else { push(data?.web ?? []); push(data?.news ?? []); }
-    return out;
-  } catch { return []; }
+  const r = await fetch("https://api.firecrawl.dev/v2/search", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    // tbs: qdr:m -> Google "past month" filter for fresher results.
+    body: JSON.stringify({ query, limit, sources: ["web", "news"], tbs: "qdr:m" }),
+  });
+  if (!r.ok) throw new Error(await readFirecrawlError(r));
+  const j: any = await r.json();
+  const data = j?.data ?? j;
+  const out: SearchHit[] = [];
+  const push = (arr: any[]) => {
+    for (const it of arr ?? []) {
+      if (!it?.url) continue;
+      out.push({
+        url: it.url,
+        title: String(it.title ?? it.url),
+        description: String(it.description ?? it.snippet ?? ""),
+        preview: it.image ?? it.thumbnail ?? null,
+        createdAt: it.date ?? it.publishedDate ?? null,
+      });
+    }
+  };
+  if (Array.isArray(data)) push(data);
+  else { push(data?.web ?? []); push(data?.news ?? []); }
+  return out;
 }
 
 
