@@ -11,16 +11,23 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as YoutubeRouteImport } from './routes/youtube'
 import { Route as ViolationsRouteImport } from './routes/violations'
+import { Route as ThreatScannerRouteImport } from './routes/threat-scanner'
+import { Route as ThreatRadarRouteImport } from './routes/threat-radar'
 import { Route as TakedownRouteImport } from './routes/takedown'
+import { Route as SocialMonitoringRouteImport } from './routes/social-monitoring'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ReputationScoreRouteImport } from './routes/reputation-score'
 import { Route as RegistryRouteImport } from './routes/registry'
+import { Route as NewsMonitoringRouteImport } from './routes/news-monitoring'
 import { Route as MonitoringJobsRouteImport } from './routes/monitoring-jobs'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MatchingRouteImport } from './routes/matching'
+import { Route as ImpersonationRouteImport } from './routes/impersonation'
 import { Route as IdentityRouteImport } from './routes/identity'
 import { Route as EnforcementRouteImport } from './routes/enforcement'
 import { Route as EliteRouteImport } from './routes/elite'
+import { Route as DeepfakeRouteImport } from './routes/deepfake'
 import { Route as CertificatesRouteImport } from './routes/certificates'
 import { Route as BrowserAgentRouteImport } from './routes/browser-agent'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -47,9 +54,24 @@ const ViolationsRoute = ViolationsRouteImport.update({
   path: '/violations',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ThreatScannerRoute = ThreatScannerRouteImport.update({
+  id: '/threat-scanner',
+  path: '/threat-scanner',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ThreatRadarRoute = ThreatRadarRouteImport.update({
+  id: '/threat-radar',
+  path: '/threat-radar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TakedownRoute = TakedownRouteImport.update({
   id: '/takedown',
   path: '/takedown',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SocialMonitoringRoute = SocialMonitoringRouteImport.update({
+  id: '/social-monitoring',
+  path: '/social-monitoring',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -57,9 +79,19 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReputationScoreRoute = ReputationScoreRouteImport.update({
+  id: '/reputation-score',
+  path: '/reputation-score',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const RegistryRoute = RegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewsMonitoringRoute = NewsMonitoringRouteImport.update({
+  id: '/news-monitoring',
+  path: '/news-monitoring',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MonitoringJobsRoute = MonitoringJobsRouteImport.update({
@@ -82,6 +114,11 @@ const MatchingRoute = MatchingRouteImport.update({
   path: '/matching',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ImpersonationRoute = ImpersonationRouteImport.update({
+  id: '/impersonation',
+  path: '/impersonation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IdentityRoute = IdentityRouteImport.update({
   id: '/identity',
   path: '/identity',
@@ -95,6 +132,11 @@ const EnforcementRoute = EnforcementRouteImport.update({
 const EliteRoute = EliteRouteImport.update({
   id: '/elite',
   path: '/elite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeepfakeRoute = DeepfakeRouteImport.update({
+  id: '/deepfake',
+  path: '/deepfake',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CertificatesRoute = CertificatesRouteImport.update({
@@ -185,16 +227,23 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
+  '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
+  '/impersonation': typeof ImpersonationRoute
   '/matching': typeof MatchingRoute
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
+  '/news-monitoring': typeof NewsMonitoringRoute
   '/registry': typeof RegistryRoute
+  '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
+  '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
+  '/threat-radar': typeof ThreatRadarRoute
+  '/threat-scanner': typeof ThreatScannerRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -214,16 +263,23 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
+  '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
+  '/impersonation': typeof ImpersonationRoute
   '/matching': typeof MatchingRoute
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
+  '/news-monitoring': typeof NewsMonitoringRoute
   '/registry': typeof RegistryRoute
+  '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
+  '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
+  '/threat-radar': typeof ThreatRadarRoute
+  '/threat-scanner': typeof ThreatScannerRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -244,16 +300,23 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
+  '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
+  '/impersonation': typeof ImpersonationRoute
   '/matching': typeof MatchingRoute
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
+  '/news-monitoring': typeof NewsMonitoringRoute
   '/registry': typeof RegistryRoute
+  '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
+  '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
+  '/threat-radar': typeof ThreatRadarRoute
+  '/threat-scanner': typeof ThreatScannerRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -275,16 +338,23 @@ export interface FileRouteTypes {
     | '/auth'
     | '/browser-agent'
     | '/certificates'
+    | '/deepfake'
     | '/elite'
     | '/enforcement'
     | '/identity'
+    | '/impersonation'
     | '/matching'
     | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
+    | '/news-monitoring'
     | '/registry'
+    | '/reputation-score'
     | '/settings'
+    | '/social-monitoring'
     | '/takedown'
+    | '/threat-radar'
+    | '/threat-scanner'
     | '/violations'
     | '/youtube'
     | '/.mcp/list-tools'
@@ -304,16 +374,23 @@ export interface FileRouteTypes {
     | '/auth'
     | '/browser-agent'
     | '/certificates'
+    | '/deepfake'
     | '/elite'
     | '/enforcement'
     | '/identity'
+    | '/impersonation'
     | '/matching'
     | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
+    | '/news-monitoring'
     | '/registry'
+    | '/reputation-score'
     | '/settings'
+    | '/social-monitoring'
     | '/takedown'
+    | '/threat-radar'
+    | '/threat-scanner'
     | '/violations'
     | '/youtube'
     | '/.mcp/list-tools'
@@ -333,16 +410,23 @@ export interface FileRouteTypes {
     | '/auth'
     | '/browser-agent'
     | '/certificates'
+    | '/deepfake'
     | '/elite'
     | '/enforcement'
     | '/identity'
+    | '/impersonation'
     | '/matching'
     | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
+    | '/news-monitoring'
     | '/registry'
+    | '/reputation-score'
     | '/settings'
+    | '/social-monitoring'
     | '/takedown'
+    | '/threat-radar'
+    | '/threat-scanner'
     | '/violations'
     | '/youtube'
     | '/.mcp/list-tools'
@@ -363,16 +447,23 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   BrowserAgentRoute: typeof BrowserAgentRoute
   CertificatesRoute: typeof CertificatesRoute
+  DeepfakeRoute: typeof DeepfakeRoute
   EliteRoute: typeof EliteRoute
   EnforcementRoute: typeof EnforcementRoute
   IdentityRoute: typeof IdentityRoute
+  ImpersonationRoute: typeof ImpersonationRoute
   MatchingRoute: typeof MatchingRoute
   McpRoute: typeof McpRoute
   MonitoringRoute: typeof MonitoringRoute
   MonitoringJobsRoute: typeof MonitoringJobsRoute
+  NewsMonitoringRoute: typeof NewsMonitoringRoute
   RegistryRoute: typeof RegistryRoute
+  ReputationScoreRoute: typeof ReputationScoreRoute
   SettingsRoute: typeof SettingsRoute
+  SocialMonitoringRoute: typeof SocialMonitoringRoute
   TakedownRoute: typeof TakedownRoute
+  ThreatRadarRoute: typeof ThreatRadarRoute
+  ThreatScannerRoute: typeof ThreatScannerRoute
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
@@ -402,11 +493,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ViolationsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/threat-scanner': {
+      id: '/threat-scanner'
+      path: '/threat-scanner'
+      fullPath: '/threat-scanner'
+      preLoaderRoute: typeof ThreatScannerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/threat-radar': {
+      id: '/threat-radar'
+      path: '/threat-radar'
+      fullPath: '/threat-radar'
+      preLoaderRoute: typeof ThreatRadarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/takedown': {
       id: '/takedown'
       path: '/takedown'
       fullPath: '/takedown'
       preLoaderRoute: typeof TakedownRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/social-monitoring': {
+      id: '/social-monitoring'
+      path: '/social-monitoring'
+      fullPath: '/social-monitoring'
+      preLoaderRoute: typeof SocialMonitoringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -416,11 +528,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reputation-score': {
+      id: '/reputation-score'
+      path: '/reputation-score'
+      fullPath: '/reputation-score'
+      preLoaderRoute: typeof ReputationScoreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/registry': {
       id: '/registry'
       path: '/registry'
       fullPath: '/registry'
       preLoaderRoute: typeof RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/news-monitoring': {
+      id: '/news-monitoring'
+      path: '/news-monitoring'
+      fullPath: '/news-monitoring'
+      preLoaderRoute: typeof NewsMonitoringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/monitoring-jobs': {
@@ -451,6 +577,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MatchingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/impersonation': {
+      id: '/impersonation'
+      path: '/impersonation'
+      fullPath: '/impersonation'
+      preLoaderRoute: typeof ImpersonationRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/identity': {
       id: '/identity'
       path: '/identity'
@@ -470,6 +603,13 @@ declare module '@tanstack/react-router' {
       path: '/elite'
       fullPath: '/elite'
       preLoaderRoute: typeof EliteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/deepfake': {
+      id: '/deepfake'
+      path: '/deepfake'
+      fullPath: '/deepfake'
+      preLoaderRoute: typeof DeepfakeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/certificates': {
@@ -587,16 +727,23 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   BrowserAgentRoute: BrowserAgentRoute,
   CertificatesRoute: CertificatesRoute,
+  DeepfakeRoute: DeepfakeRoute,
   EliteRoute: EliteRoute,
   EnforcementRoute: EnforcementRoute,
   IdentityRoute: IdentityRoute,
+  ImpersonationRoute: ImpersonationRoute,
   MatchingRoute: MatchingRoute,
   McpRoute: McpRoute,
   MonitoringRoute: MonitoringRoute,
   MonitoringJobsRoute: MonitoringJobsRoute,
+  NewsMonitoringRoute: NewsMonitoringRoute,
   RegistryRoute: RegistryRoute,
+  ReputationScoreRoute: ReputationScoreRoute,
   SettingsRoute: SettingsRoute,
+  SocialMonitoringRoute: SocialMonitoringRoute,
   TakedownRoute: TakedownRoute,
+  ThreatRadarRoute: ThreatRadarRoute,
+  ThreatScannerRoute: ThreatScannerRoute,
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
