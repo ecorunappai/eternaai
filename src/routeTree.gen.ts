@@ -21,6 +21,7 @@ import { Route as MonitoringJobsRouteImport } from './routes/monitoring-jobs'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as MatchingRouteImport } from './routes/matching'
+import { Route as ImpersonationRouteImport } from './routes/impersonation'
 import { Route as IdentityRouteImport } from './routes/identity'
 import { Route as EnforcementRouteImport } from './routes/enforcement'
 import { Route as EliteRouteImport } from './routes/elite'
@@ -99,6 +100,11 @@ const McpRoute = McpRouteImport.update({
 const MatchingRoute = MatchingRouteImport.update({
   id: '/matching',
   path: '/matching',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ImpersonationRoute = ImpersonationRouteImport.update({
+  id: '/impersonation',
+  path: '/impersonation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IdentityRoute = IdentityRouteImport.update({
@@ -213,6 +219,7 @@ export interface FileRoutesByFullPath {
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
+  '/impersonation': typeof ImpersonationRoute
   '/matching': typeof MatchingRoute
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
@@ -246,6 +253,7 @@ export interface FileRoutesByTo {
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
+  '/impersonation': typeof ImpersonationRoute
   '/matching': typeof MatchingRoute
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
@@ -280,6 +288,7 @@ export interface FileRoutesById {
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
+  '/impersonation': typeof ImpersonationRoute
   '/matching': typeof MatchingRoute
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
@@ -315,6 +324,7 @@ export interface FileRouteTypes {
     | '/elite'
     | '/enforcement'
     | '/identity'
+    | '/impersonation'
     | '/matching'
     | '/mcp'
     | '/monitoring'
@@ -348,6 +358,7 @@ export interface FileRouteTypes {
     | '/elite'
     | '/enforcement'
     | '/identity'
+    | '/impersonation'
     | '/matching'
     | '/mcp'
     | '/monitoring'
@@ -381,6 +392,7 @@ export interface FileRouteTypes {
     | '/elite'
     | '/enforcement'
     | '/identity'
+    | '/impersonation'
     | '/matching'
     | '/mcp'
     | '/monitoring'
@@ -415,6 +427,7 @@ export interface RootRouteChildren {
   EliteRoute: typeof EliteRoute
   EnforcementRoute: typeof EnforcementRoute
   IdentityRoute: typeof IdentityRoute
+  ImpersonationRoute: typeof ImpersonationRoute
   MatchingRoute: typeof MatchingRoute
   McpRoute: typeof McpRoute
   MonitoringRoute: typeof MonitoringRoute
@@ -522,6 +535,13 @@ declare module '@tanstack/react-router' {
       path: '/matching'
       fullPath: '/matching'
       preLoaderRoute: typeof MatchingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/impersonation': {
+      id: '/impersonation'
+      path: '/impersonation'
+      fullPath: '/impersonation'
+      preLoaderRoute: typeof ImpersonationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/identity': {
@@ -671,6 +691,7 @@ const rootRouteChildren: RootRouteChildren = {
   EliteRoute: EliteRoute,
   EnforcementRoute: EnforcementRoute,
   IdentityRoute: IdentityRoute,
+  ImpersonationRoute: ImpersonationRoute,
   MatchingRoute: MatchingRoute,
   McpRoute: McpRoute,
   MonitoringRoute: MonitoringRoute,
