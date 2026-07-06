@@ -77,19 +77,58 @@ const PLATFORMS: PlatformDef[] = [
 
 const RISK_KEYWORDS: Record<string, number> = {
   expose: 22, exposed: 22, defame: 24, defamation: 24, defamatory: 24,
-  troll: 18, controversy: 18, leaked: 24, scandal: 22,
-  reaction: 14, roast: 16, viral: 8, "fake news": 20, deepfake: 26,
-  morphed: 24, fake: 12, insult: 16, harassment: 20, abuse: 18,
-  reupload: 22, repost: 18, latest: 6, news: 6, nude: 28, uncensored: 22,
+  troll: 18, controversy: 16, controversial: 14, leaked: 24, scandal: 22,
+  allegation: 22, allegations: 22, accused: 20, "false claim": 22,
+  "fake news": 22, misinformation: 22, misleading: 18,
+  reaction: 8, roast: 16, viral: 8, deepfake: 28, "ai generated": 22, "ai-generated": 22,
+  morphed: 26, fake: 12, impersonation: 26, impersonator: 26, "fake profile": 26,
+  insult: 18, harassment: 22, abuse: 20, hate: 22, racist: 24, slur: 24,
+  reupload: 20, repost: 14, "stolen content": 24, "copyright infringement": 24,
+  nude: 28, uncensored: 22, scam: 24, fraud: 24, boycott: 22,
+  cancel: 14, cancelled: 14, rumor: 18, rumour: 18,
+  criticism: 12, criticized: 12, bashing: 20, backlash: 20, outrage: 20,
 };
 
-function scoreText(title: string, snippet: string, subject: string): number {
+// Positive / neutral signals — presence downweights and (if no risk hit) excludes the item.
+const POSITIVE_KEYWORDS = [
+  "interview", "collab", "collaboration", "promo ", "promotion", "sponsored",
+  "appreciation", "congratulations", "congrats", "birthday wishes", "tribute",
+  "fan edit", "fanmade", "fan-made", "official announcement", "press release",
+  "award", "wins award", "honored", "celebrates", "celebration",
+  "brand ambassador", "endorsement",
+];
+
+function scoreText(title: string, snippet: string, subject: string): { score: number; risky: boolean; positive: boolean; hits: string[] } {
   const lower = `${title} ${snippet}`.toLowerCase();
   const subjLower = subject.toLowerCase();
   let s = 0;
-  if (lower.includes(subjLower)) s += 35;
-  for (const [k, w] of Object.entries(RISK_KEYWORDS)) if (lower.includes(k)) s += w;
-  return Math.min(100, s);
+  const hits: string[] = [];
+  if (lower.includes(subjLower)) s += 20;
+  for (const [k, w] of Object.entries(RISK_KEYWORDS)) {
+    if (lower.includes(k)) { s += w; hits.push(k); }
+  }
+  const positive = POSITIVE_KEYWORDS.some((k) => lower.includes(k));
+  if (positive) s = Math.max(0, s - 25);
+  return { score: Math.min(100, s), risky: hits.length > 0, positive, hits };
+}
+
+function recommendedAction(category: string, score: number): string {
+  if (score >= 81) return "Urgent Escalation";
+  if (category === "deepfake_ai_misuse") return "Legal Review";
+  if (/impersonat/.test(category)) return "Impersonation Report";
+  if (category === "unauthorized_reupload" || category === "copyright_infringement") return "Copyright Review";
+  if (category === "defamatory_content" && score >= 61) return "Legal Review";
+  if (score >= 61) return "Platform Report";
+  if (score >= 41) return "Evidence Collection";
+  return "Monitor";
+}
+
+function severityLabel(score: number): string {
+  if (score >= 81) return "Critical";
+  if (score >= 61) return "High";
+  if (score >= 41) return "Moderate";
+  if (score >= 21) return "Low";
+  return "Minimal";
 }
 
 function classify(title: string, snippet: string): { category: string; fairUse: string } {
