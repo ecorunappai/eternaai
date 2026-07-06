@@ -308,13 +308,40 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
       for (const h of hits) {
         if (seen.has(h.url)) continue;
         seen.add(h.url);
-        const textSignal = scoreText(h.title, h.description ?? "", subject);
+        const sig = scoreText(h.title, h.description ?? "", subject);
         const cls = classify(h.title, h.description ?? "");
         const subjectInTitle = `${h.title} ${h.description}`.toLowerCase().includes(subject.toLowerCase());
-        const keywordScore = subjectInTitle ? 100 : 50;
-        // No visual verification yet — cap to 69 like youtube engine.
-        const preFinal = Math.min(69, Math.round(keywordScore * 0.35 + textSignal * 0.25));
-        const risk = preFinal >= 60 ? "possible" : "review";
+
+        // Reputation Intelligence filter: only surface content with a real risk signal.
+        // Skip pure positive/neutral mentions and anything with zero risk keywords
+        // unless the subject appears alongside a risky category classification.
+        if (!sig.risky) continue;
+        if (sig.positive && sig.score < 25) continue;
+
+        // Reputation Risk Score 0-100.
+        // 45% keyword risk density, 25% subject presence, 20% platform reach weight,
+        // 10% classification severity bump for deepfake/defamation/impersonation.
+        const platformReach: Record<string, number> = {
+          "X": 90, "TikTok": 85, "Instagram": 80, "Facebook": 70,
+          "Reddit": 75, "News": 80, "Blog": 55, "Website": 55,
+        };
+        const reach = platformReach[platform.id] ?? 60;
+        const classBoost =
+          cls.category === "deepfake_ai_misuse" ? 100 :
+          cls.category === "defamatory_content" ? 80 :
+          cls.category === "unauthorized_reupload" ? 60 : 40;
+        const reputationRisk = Math.min(100, Math.round(
+          sig.score * 0.45 +
+          (subjectInTitle ? 100 : 40) * 0.25 +
+          reach * 0.20 +
+          classBoost * 0.10,
+        ));
+        const risk =
+          reputationRisk >= 81 ? "confirmed" :
+          reputationRisk >= 61 ? "strong" :
+          reputationRisk >= 41 ? "possible" : "review";
+        const action = recommendedAction(cls.category, reputationRisk);
+        const severity = severityLabel(reputationRisk);
         const profileUrl = profileUrlFor(platform.id, h.url);
         let host = "";
         try { host = new URL(h.url).host.replace(/^www\./, ""); } catch { /* noop */ }
@@ -331,18 +358,22 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
           fair_use_flag: cls.fairUse,
           violation_category: cls.category,
           phash_score: 0, dhash_score: 0, clip_score: 0,
-          metadata_score: textSignal,
-          ai_score: 0,
-          final_confidence_score: preFinal,
+          metadata_score: sig.score,
+          ai_score: classBoost,
+          final_confidence_score: reputationRisk,
           risk_level: risk,
           match_type: platform.matchType,
           status: "pending",
           discovered_via: discoveredVia,
-          notes: `SOURCE:${source} | PLATFORM:${platform.id} | PROFILE:${profileUrl ?? ""} | HOST:${host} | ${String(h.description ?? "").slice(0, 220)}`,
+          notes: `RISK:${severity} (${reputationRisk}/100) | ACTION:${action} | HITS:${sig.hits.slice(0, 6).join(",")} | PLATFORM:${platform.id} | PROFILE:${profileUrl ?? ""} | HOST:${host} | ${String(h.description ?? "").slice(0, 200)}`,
         });
         counters[platform.id]++;
       }
     }
+
+    // Highest risk first — spec requires sort by Reputation Risk Score desc.
+    rows.sort((a, b) => (b.final_confidence_score ?? 0) - (a.final_confidence_score ?? 0));
+
 
     // Replace previous multi-platform pending matches for this scope, keep escalated.
     let del = supabase.from("discovered_matches").delete()
