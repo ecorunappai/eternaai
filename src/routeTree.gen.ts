@@ -15,6 +15,7 @@ import { Route as TakedownRouteImport } from './routes/takedown'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReputationScoreRouteImport } from './routes/reputation-score'
 import { Route as RegistryRouteImport } from './routes/registry'
+import { Route as NewsMonitoringRouteImport } from './routes/news-monitoring'
 import { Route as MonitoringJobsRouteImport } from './routes/monitoring-jobs'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
 import { Route as McpRouteImport } from './routes/mcp'
@@ -66,6 +67,11 @@ const ReputationScoreRoute = ReputationScoreRouteImport.update({
 const RegistryRoute = RegistryRouteImport.update({
   id: '/registry',
   path: '/registry',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewsMonitoringRoute = NewsMonitoringRouteImport.update({
+  id: '/news-monitoring',
+  path: '/news-monitoring',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MonitoringJobsRoute = MonitoringJobsRouteImport.update({
@@ -198,6 +204,7 @@ export interface FileRoutesByFullPath {
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
+  '/news-monitoring': typeof NewsMonitoringRoute
   '/registry': typeof RegistryRoute
   '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
@@ -228,6 +235,7 @@ export interface FileRoutesByTo {
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
+  '/news-monitoring': typeof NewsMonitoringRoute
   '/registry': typeof RegistryRoute
   '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
@@ -259,6 +267,7 @@ export interface FileRoutesById {
   '/mcp': typeof McpRoute
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
+  '/news-monitoring': typeof NewsMonitoringRoute
   '/registry': typeof RegistryRoute
   '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
@@ -291,6 +300,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
+    | '/news-monitoring'
     | '/registry'
     | '/reputation-score'
     | '/settings'
@@ -321,6 +331,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
+    | '/news-monitoring'
     | '/registry'
     | '/reputation-score'
     | '/settings'
@@ -351,6 +362,7 @@ export interface FileRouteTypes {
     | '/mcp'
     | '/monitoring'
     | '/monitoring-jobs'
+    | '/news-monitoring'
     | '/registry'
     | '/reputation-score'
     | '/settings'
@@ -382,6 +394,7 @@ export interface RootRouteChildren {
   McpRoute: typeof McpRoute
   MonitoringRoute: typeof MonitoringRoute
   MonitoringJobsRoute: typeof MonitoringJobsRoute
+  NewsMonitoringRoute: typeof NewsMonitoringRoute
   RegistryRoute: typeof RegistryRoute
   ReputationScoreRoute: typeof ReputationScoreRoute
   SettingsRoute: typeof SettingsRoute
@@ -441,6 +454,13 @@ declare module '@tanstack/react-router' {
       path: '/registry'
       fullPath: '/registry'
       preLoaderRoute: typeof RegistryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/news-monitoring': {
+      id: '/news-monitoring'
+      path: '/news-monitoring'
+      fullPath: '/news-monitoring'
+      preLoaderRoute: typeof NewsMonitoringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/monitoring-jobs': {
@@ -614,6 +634,7 @@ const rootRouteChildren: RootRouteChildren = {
   McpRoute: McpRoute,
   MonitoringRoute: MonitoringRoute,
   MonitoringJobsRoute: MonitoringJobsRoute,
+  NewsMonitoringRoute: NewsMonitoringRoute,
   RegistryRoute: RegistryRoute,
   ReputationScoreRoute: ReputationScoreRoute,
   SettingsRoute: SettingsRoute,
