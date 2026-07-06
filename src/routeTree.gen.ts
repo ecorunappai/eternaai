@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as YoutubeRouteImport } from './routes/youtube'
 import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as TakedownRouteImport } from './routes/takedown'
+import { Route as SocialMonitoringRouteImport } from './routes/social-monitoring'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReputationScoreRouteImport } from './routes/reputation-score'
 import { Route as RegistryRouteImport } from './routes/registry'
@@ -52,6 +53,11 @@ const ViolationsRoute = ViolationsRouteImport.update({
 const TakedownRoute = TakedownRouteImport.update({
   id: '/takedown',
   path: '/takedown',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SocialMonitoringRoute = SocialMonitoringRouteImport.update({
+  id: '/social-monitoring',
+  path: '/social-monitoring',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SettingsRoute = SettingsRouteImport.update({
@@ -208,6 +214,7 @@ export interface FileRoutesByFullPath {
   '/registry': typeof RegistryRoute
   '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
+  '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
@@ -239,6 +246,7 @@ export interface FileRoutesByTo {
   '/registry': typeof RegistryRoute
   '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
+  '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/registry': typeof RegistryRoute
   '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
+  '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
@@ -304,6 +313,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/reputation-score'
     | '/settings'
+    | '/social-monitoring'
     | '/takedown'
     | '/violations'
     | '/youtube'
@@ -335,6 +345,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/reputation-score'
     | '/settings'
+    | '/social-monitoring'
     | '/takedown'
     | '/violations'
     | '/youtube'
@@ -366,6 +377,7 @@ export interface FileRouteTypes {
     | '/registry'
     | '/reputation-score'
     | '/settings'
+    | '/social-monitoring'
     | '/takedown'
     | '/violations'
     | '/youtube'
@@ -398,6 +410,7 @@ export interface RootRouteChildren {
   RegistryRoute: typeof RegistryRoute
   ReputationScoreRoute: typeof ReputationScoreRoute
   SettingsRoute: typeof SettingsRoute
+  SocialMonitoringRoute: typeof SocialMonitoringRoute
   TakedownRoute: typeof TakedownRoute
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
@@ -433,6 +446,13 @@ declare module '@tanstack/react-router' {
       path: '/takedown'
       fullPath: '/takedown'
       preLoaderRoute: typeof TakedownRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/social-monitoring': {
+      id: '/social-monitoring'
+      path: '/social-monitoring'
+      fullPath: '/social-monitoring'
+      preLoaderRoute: typeof SocialMonitoringRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/settings': {
@@ -638,6 +658,7 @@ const rootRouteChildren: RootRouteChildren = {
   RegistryRoute: RegistryRoute,
   ReputationScoreRoute: ReputationScoreRoute,
   SettingsRoute: SettingsRoute,
+  SocialMonitoringRoute: SocialMonitoringRoute,
   TakedownRoute: TakedownRoute,
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
