@@ -24,6 +24,7 @@ import { Route as MatchingRouteImport } from './routes/matching'
 import { Route as IdentityRouteImport } from './routes/identity'
 import { Route as EnforcementRouteImport } from './routes/enforcement'
 import { Route as EliteRouteImport } from './routes/elite'
+import { Route as DeepfakeRouteImport } from './routes/deepfake'
 import { Route as CertificatesRouteImport } from './routes/certificates'
 import { Route as BrowserAgentRouteImport } from './routes/browser-agent'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -115,6 +116,11 @@ const EliteRoute = EliteRouteImport.update({
   path: '/elite',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DeepfakeRoute = DeepfakeRouteImport.update({
+  id: '/deepfake',
+  path: '/deepfake',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CertificatesRoute = CertificatesRouteImport.update({
   id: '/certificates',
   path: '/certificates',
@@ -203,6 +209,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
+  '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
@@ -235,6 +242,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
+  '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
@@ -268,6 +276,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
   '/certificates': typeof CertificatesRoute
+  '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
   '/enforcement': typeof EnforcementRoute
   '/identity': typeof IdentityRoute
@@ -302,6 +311,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/browser-agent'
     | '/certificates'
+    | '/deepfake'
     | '/elite'
     | '/enforcement'
     | '/identity'
@@ -334,6 +344,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/browser-agent'
     | '/certificates'
+    | '/deepfake'
     | '/elite'
     | '/enforcement'
     | '/identity'
@@ -366,6 +377,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/browser-agent'
     | '/certificates'
+    | '/deepfake'
     | '/elite'
     | '/enforcement'
     | '/identity'
@@ -399,6 +411,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   BrowserAgentRoute: typeof BrowserAgentRoute
   CertificatesRoute: typeof CertificatesRoute
+  DeepfakeRoute: typeof DeepfakeRoute
   EliteRoute: typeof EliteRoute
   EnforcementRoute: typeof EnforcementRoute
   IdentityRoute: typeof IdentityRoute
@@ -532,6 +545,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EliteRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/deepfake': {
+      id: '/deepfake'
+      path: '/deepfake'
+      fullPath: '/deepfake'
+      preLoaderRoute: typeof DeepfakeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/certificates': {
       id: '/certificates'
       path: '/certificates'
@@ -647,6 +667,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   BrowserAgentRoute: BrowserAgentRoute,
   CertificatesRoute: CertificatesRoute,
+  DeepfakeRoute: DeepfakeRoute,
   EliteRoute: EliteRoute,
   EnforcementRoute: EnforcementRoute,
   IdentityRoute: IdentityRoute,
