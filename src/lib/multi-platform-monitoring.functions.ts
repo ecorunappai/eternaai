@@ -77,19 +77,58 @@ const PLATFORMS: PlatformDef[] = [
 
 const RISK_KEYWORDS: Record<string, number> = {
   expose: 22, exposed: 22, defame: 24, defamation: 24, defamatory: 24,
-  troll: 18, controversy: 18, leaked: 24, scandal: 22,
-  reaction: 14, roast: 16, viral: 8, "fake news": 20, deepfake: 26,
-  morphed: 24, fake: 12, insult: 16, harassment: 20, abuse: 18,
-  reupload: 22, repost: 18, latest: 6, news: 6, nude: 28, uncensored: 22,
+  troll: 18, controversy: 16, controversial: 14, leaked: 24, scandal: 22,
+  allegation: 22, allegations: 22, accused: 20, "false claim": 22,
+  "fake news": 22, misinformation: 22, misleading: 18,
+  reaction: 8, roast: 16, viral: 8, deepfake: 28, "ai generated": 22, "ai-generated": 22,
+  morphed: 26, fake: 12, impersonation: 26, impersonator: 26, "fake profile": 26,
+  insult: 18, harassment: 22, abuse: 20, hate: 22, racist: 24, slur: 24,
+  reupload: 20, repost: 14, "stolen content": 24, "copyright infringement": 24,
+  nude: 28, uncensored: 22, scam: 24, fraud: 24, boycott: 22,
+  cancel: 14, cancelled: 14, rumor: 18, rumour: 18,
+  criticism: 12, criticized: 12, bashing: 20, backlash: 20, outrage: 20,
 };
 
-function scoreText(title: string, snippet: string, subject: string): number {
+// Positive / neutral signals — presence downweights and (if no risk hit) excludes the item.
+const POSITIVE_KEYWORDS = [
+  "interview", "collab", "collaboration", "promo ", "promotion", "sponsored",
+  "appreciation", "congratulations", "congrats", "birthday wishes", "tribute",
+  "fan edit", "fanmade", "fan-made", "official announcement", "press release",
+  "award", "wins award", "honored", "celebrates", "celebration",
+  "brand ambassador", "endorsement",
+];
+
+function scoreText(title: string, snippet: string, subject: string): { score: number; risky: boolean; positive: boolean; hits: string[] } {
   const lower = `${title} ${snippet}`.toLowerCase();
   const subjLower = subject.toLowerCase();
   let s = 0;
-  if (lower.includes(subjLower)) s += 35;
-  for (const [k, w] of Object.entries(RISK_KEYWORDS)) if (lower.includes(k)) s += w;
-  return Math.min(100, s);
+  const hits: string[] = [];
+  if (lower.includes(subjLower)) s += 20;
+  for (const [k, w] of Object.entries(RISK_KEYWORDS)) {
+    if (lower.includes(k)) { s += w; hits.push(k); }
+  }
+  const positive = POSITIVE_KEYWORDS.some((k) => lower.includes(k));
+  if (positive) s = Math.max(0, s - 25);
+  return { score: Math.min(100, s), risky: hits.length > 0, positive, hits };
+}
+
+function recommendedAction(category: string, score: number): string {
+  if (score >= 81) return "Urgent Escalation";
+  if (category === "deepfake_ai_misuse") return "Legal Review";
+  if (/impersonat/.test(category)) return "Impersonation Report";
+  if (category === "unauthorized_reupload" || category === "copyright_infringement") return "Copyright Review";
+  if (category === "defamatory_content" && score >= 61) return "Legal Review";
+  if (score >= 61) return "Platform Report";
+  if (score >= 41) return "Evidence Collection";
+  return "Monitor";
+}
+
+function severityLabel(score: number): string {
+  if (score >= 81) return "Critical";
+  if (score >= 61) return "High";
+  if (score >= 41) return "Moderate";
+  if (score >= 21) return "Low";
+  return "Minimal";
 }
 
 function classify(title: string, snippet: string): { category: string; fairUse: string } {
@@ -269,13 +308,40 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
       for (const h of hits) {
         if (seen.has(h.url)) continue;
         seen.add(h.url);
-        const textSignal = scoreText(h.title, h.description ?? "", subject);
+        const sig = scoreText(h.title, h.description ?? "", subject);
         const cls = classify(h.title, h.description ?? "");
         const subjectInTitle = `${h.title} ${h.description}`.toLowerCase().includes(subject.toLowerCase());
-        const keywordScore = subjectInTitle ? 100 : 50;
-        // No visual verification yet — cap to 69 like youtube engine.
-        const preFinal = Math.min(69, Math.round(keywordScore * 0.35 + textSignal * 0.25));
-        const risk = preFinal >= 60 ? "possible" : "review";
+
+        // Reputation Intelligence filter: only surface content with a real risk signal.
+        // Skip pure positive/neutral mentions and anything with zero risk keywords
+        // unless the subject appears alongside a risky category classification.
+        if (!sig.risky) continue;
+        if (sig.positive && sig.score < 25) continue;
+
+        // Reputation Risk Score 0-100.
+        // 45% keyword risk density, 25% subject presence, 20% platform reach weight,
+        // 10% classification severity bump for deepfake/defamation/impersonation.
+        const platformReach: Record<string, number> = {
+          "X": 90, "TikTok": 85, "Instagram": 80, "Facebook": 70,
+          "Reddit": 75, "News": 80, "Blog": 55, "Website": 55,
+        };
+        const reach = platformReach[platform.id] ?? 60;
+        const classBoost =
+          cls.category === "deepfake_ai_misuse" ? 100 :
+          cls.category === "defamatory_content" ? 80 :
+          cls.category === "unauthorized_reupload" ? 60 : 40;
+        const reputationRisk = Math.min(100, Math.round(
+          sig.score * 0.45 +
+          (subjectInTitle ? 100 : 40) * 0.25 +
+          reach * 0.20 +
+          classBoost * 0.10,
+        ));
+        const risk =
+          reputationRisk >= 81 ? "confirmed" :
+          reputationRisk >= 61 ? "strong" :
+          reputationRisk >= 41 ? "possible" : "review";
+        const action = recommendedAction(cls.category, reputationRisk);
+        const severity = severityLabel(reputationRisk);
         const profileUrl = profileUrlFor(platform.id, h.url);
         let host = "";
         try { host = new URL(h.url).host.replace(/^www\./, ""); } catch { /* noop */ }
@@ -292,18 +358,22 @@ export const runMultiPlatformScan = createServerFn({ method: "POST" })
           fair_use_flag: cls.fairUse,
           violation_category: cls.category,
           phash_score: 0, dhash_score: 0, clip_score: 0,
-          metadata_score: textSignal,
-          ai_score: 0,
-          final_confidence_score: preFinal,
+          metadata_score: sig.score,
+          ai_score: classBoost,
+          final_confidence_score: reputationRisk,
           risk_level: risk,
           match_type: platform.matchType,
           status: "pending",
           discovered_via: discoveredVia,
-          notes: `SOURCE:${source} | PLATFORM:${platform.id} | PROFILE:${profileUrl ?? ""} | HOST:${host} | ${String(h.description ?? "").slice(0, 220)}`,
+          notes: `RISK:${severity} (${reputationRisk}/100) | ACTION:${action} | HITS:${sig.hits.slice(0, 6).join(",")} | PLATFORM:${platform.id} | PROFILE:${profileUrl ?? ""} | HOST:${host} | ${String(h.description ?? "").slice(0, 200)}`,
         });
         counters[platform.id]++;
       }
     }
+
+    // Highest risk first — spec requires sort by Reputation Risk Score desc.
+    rows.sort((a, b) => (b.final_confidence_score ?? 0) - (a.final_confidence_score ?? 0));
+
 
     // Replace previous multi-platform pending matches for this scope, keep escalated.
     let del = supabase.from("discovered_matches").delete()
