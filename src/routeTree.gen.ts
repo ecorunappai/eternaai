@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as YoutubeRouteImport } from './routes/youtube'
 import { Route as ViolationsRouteImport } from './routes/violations'
+import { Route as ThreatScannerRouteImport } from './routes/threat-scanner'
 import { Route as TakedownRouteImport } from './routes/takedown'
 import { Route as SocialMonitoringRouteImport } from './routes/social-monitoring'
 import { Route as SettingsRouteImport } from './routes/settings'
@@ -50,6 +51,11 @@ const YoutubeRoute = YoutubeRouteImport.update({
 const ViolationsRoute = ViolationsRouteImport.update({
   id: '/violations',
   path: '/violations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ThreatScannerRoute = ThreatScannerRouteImport.update({
+  id: '/threat-scanner',
+  path: '/threat-scanner',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TakedownRoute = TakedownRouteImport.update({
@@ -230,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
+  '/threat-scanner': typeof ThreatScannerRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
+  '/threat-scanner': typeof ThreatScannerRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/social-monitoring': typeof SocialMonitoringRoute
   '/takedown': typeof TakedownRoute
+  '/threat-scanner': typeof ThreatScannerRoute
   '/violations': typeof ViolationsRoute
   '/youtube': typeof YoutubeRoute
   '/.mcp/list-tools': typeof Char91DotmcpChar93ListToolsRoute
@@ -335,6 +344,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/social-monitoring'
     | '/takedown'
+    | '/threat-scanner'
     | '/violations'
     | '/youtube'
     | '/.mcp/list-tools'
@@ -369,6 +379,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/social-monitoring'
     | '/takedown'
+    | '/threat-scanner'
     | '/violations'
     | '/youtube'
     | '/.mcp/list-tools'
@@ -403,6 +414,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/social-monitoring'
     | '/takedown'
+    | '/threat-scanner'
     | '/violations'
     | '/youtube'
     | '/.mcp/list-tools'
@@ -438,6 +450,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SocialMonitoringRoute: typeof SocialMonitoringRoute
   TakedownRoute: typeof TakedownRoute
+  ThreatScannerRoute: typeof ThreatScannerRoute
   ViolationsRoute: typeof ViolationsRoute
   YoutubeRoute: typeof YoutubeRoute
   Char91DotmcpChar93ListToolsRoute: typeof Char91DotmcpChar93ListToolsRoute
@@ -465,6 +478,13 @@ declare module '@tanstack/react-router' {
       path: '/violations'
       fullPath: '/violations'
       preLoaderRoute: typeof ViolationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/threat-scanner': {
+      id: '/threat-scanner'
+      path: '/threat-scanner'
+      fullPath: '/threat-scanner'
+      preLoaderRoute: typeof ThreatScannerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/takedown': {
@@ -702,6 +722,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SocialMonitoringRoute: SocialMonitoringRoute,
   TakedownRoute: TakedownRoute,
+  ThreatScannerRoute: ThreatScannerRoute,
   ViolationsRoute: ViolationsRoute,
   YoutubeRoute: YoutubeRoute,
   Char91DotmcpChar93ListToolsRoute: Char91DotmcpChar93ListToolsRoute,
