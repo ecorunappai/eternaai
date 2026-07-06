@@ -13,6 +13,7 @@ import { Route as YoutubeRouteImport } from './routes/youtube'
 import { Route as ViolationsRouteImport } from './routes/violations'
 import { Route as TakedownRouteImport } from './routes/takedown'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as ReputationScoreRouteImport } from './routes/reputation-score'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as MonitoringJobsRouteImport } from './routes/monitoring-jobs'
 import { Route as MonitoringRouteImport } from './routes/monitoring'
@@ -55,6 +56,11 @@ const TakedownRoute = TakedownRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReputationScoreRoute = ReputationScoreRouteImport.update({
+  id: '/reputation-score',
+  path: '/reputation-score',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegistryRoute = RegistryRouteImport.update({
@@ -193,6 +199,7 @@ export interface FileRoutesByFullPath {
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
+  '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
@@ -222,6 +229,7 @@ export interface FileRoutesByTo {
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
+  '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
@@ -252,6 +260,7 @@ export interface FileRoutesById {
   '/monitoring': typeof MonitoringRoute
   '/monitoring-jobs': typeof MonitoringJobsRoute
   '/registry': typeof RegistryRoute
+  '/reputation-score': typeof ReputationScoreRoute
   '/settings': typeof SettingsRoute
   '/takedown': typeof TakedownRoute
   '/violations': typeof ViolationsRoute
@@ -283,6 +292,7 @@ export interface FileRouteTypes {
     | '/monitoring'
     | '/monitoring-jobs'
     | '/registry'
+    | '/reputation-score'
     | '/settings'
     | '/takedown'
     | '/violations'
@@ -312,6 +322,7 @@ export interface FileRouteTypes {
     | '/monitoring'
     | '/monitoring-jobs'
     | '/registry'
+    | '/reputation-score'
     | '/settings'
     | '/takedown'
     | '/violations'
@@ -341,6 +352,7 @@ export interface FileRouteTypes {
     | '/monitoring'
     | '/monitoring-jobs'
     | '/registry'
+    | '/reputation-score'
     | '/settings'
     | '/takedown'
     | '/violations'
@@ -371,6 +383,7 @@ export interface RootRouteChildren {
   MonitoringRoute: typeof MonitoringRoute
   MonitoringJobsRoute: typeof MonitoringJobsRoute
   RegistryRoute: typeof RegistryRoute
+  ReputationScoreRoute: typeof ReputationScoreRoute
   SettingsRoute: typeof SettingsRoute
   TakedownRoute: typeof TakedownRoute
   ViolationsRoute: typeof ViolationsRoute
@@ -414,6 +427,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reputation-score': {
+      id: '/reputation-score'
+      path: '/reputation-score'
+      fullPath: '/reputation-score'
+      preLoaderRoute: typeof ReputationScoreRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/registry': {
@@ -595,6 +615,7 @@ const rootRouteChildren: RootRouteChildren = {
   MonitoringRoute: MonitoringRoute,
   MonitoringJobsRoute: MonitoringJobsRoute,
   RegistryRoute: RegistryRoute,
+  ReputationScoreRoute: ReputationScoreRoute,
   SettingsRoute: SettingsRoute,
   TakedownRoute: TakedownRoute,
   ViolationsRoute: ViolationsRoute,
