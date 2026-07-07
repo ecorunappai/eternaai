@@ -35,7 +35,7 @@ function CelebrityProtection() {
     if (!user) return;
     (async () => {
       const [{ data: a }, { data: m }] = await Promise.all([
-        supabase.from("assets").select("id,title,asset_type,thumbnail_url,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(200),
+        supabase.from("assets").select("id,title,asset_type,file_url,created_at").eq("user_id", user.id).order("created_at", { ascending: false }).limit(200),
         supabase.from("discovered_matches")
           .select("id,video_title,source_url,platform,final_confidence_score,violation_category,preview_url,asset_id")
           .eq("user_id", user.id).order("final_confidence_score", { ascending: false }).limit(300),
