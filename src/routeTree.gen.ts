@@ -29,6 +29,7 @@ import { Route as EnforcementRouteImport } from './routes/enforcement'
 import { Route as EliteRouteImport } from './routes/elite'
 import { Route as DeepfakeRouteImport } from './routes/deepfake'
 import { Route as CertificatesRouteImport } from './routes/certificates'
+import { Route as CelebrityProtectionRouteImport } from './routes/celebrity-protection'
 import { Route as BrowserAgentRouteImport } from './routes/browser-agent'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AssistantRouteImport } from './routes/assistant'
@@ -144,6 +145,11 @@ const CertificatesRoute = CertificatesRouteImport.update({
   path: '/certificates',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CelebrityProtectionRoute = CelebrityProtectionRouteImport.update({
+  id: '/celebrity-protection',
+  path: '/celebrity-protection',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BrowserAgentRoute = BrowserAgentRouteImport.update({
   id: '/browser-agent',
   path: '/browser-agent',
@@ -226,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
+  '/celebrity-protection': typeof CelebrityProtectionRoute
   '/certificates': typeof CertificatesRoute
   '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
@@ -262,6 +269,7 @@ export interface FileRoutesByTo {
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
+  '/celebrity-protection': typeof CelebrityProtectionRoute
   '/certificates': typeof CertificatesRoute
   '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/assistant': typeof AssistantRoute
   '/auth': typeof AuthRoute
   '/browser-agent': typeof BrowserAgentRoute
+  '/celebrity-protection': typeof CelebrityProtectionRoute
   '/certificates': typeof CertificatesRoute
   '/deepfake': typeof DeepfakeRoute
   '/elite': typeof EliteRoute
@@ -337,6 +346,7 @@ export interface FileRouteTypes {
     | '/assistant'
     | '/auth'
     | '/browser-agent'
+    | '/celebrity-protection'
     | '/certificates'
     | '/deepfake'
     | '/elite'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/assistant'
     | '/auth'
     | '/browser-agent'
+    | '/celebrity-protection'
     | '/certificates'
     | '/deepfake'
     | '/elite'
@@ -409,6 +420,7 @@ export interface FileRouteTypes {
     | '/assistant'
     | '/auth'
     | '/browser-agent'
+    | '/celebrity-protection'
     | '/certificates'
     | '/deepfake'
     | '/elite'
@@ -446,6 +458,7 @@ export interface RootRouteChildren {
   AssistantRoute: typeof AssistantRoute
   AuthRoute: typeof AuthRoute
   BrowserAgentRoute: typeof BrowserAgentRoute
+  CelebrityProtectionRoute: typeof CelebrityProtectionRoute
   CertificatesRoute: typeof CertificatesRoute
   DeepfakeRoute: typeof DeepfakeRoute
   EliteRoute: typeof EliteRoute
@@ -619,6 +632,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CertificatesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/celebrity-protection': {
+      id: '/celebrity-protection'
+      path: '/celebrity-protection'
+      fullPath: '/celebrity-protection'
+      preLoaderRoute: typeof CelebrityProtectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/browser-agent': {
       id: '/browser-agent'
       path: '/browser-agent'
@@ -726,6 +746,7 @@ const rootRouteChildren: RootRouteChildren = {
   AssistantRoute: AssistantRoute,
   AuthRoute: AuthRoute,
   BrowserAgentRoute: BrowserAgentRoute,
+  CelebrityProtectionRoute: CelebrityProtectionRoute,
   CertificatesRoute: CertificatesRoute,
   DeepfakeRoute: DeepfakeRoute,
   EliteRoute: EliteRoute,
