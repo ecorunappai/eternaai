@@ -26,7 +26,7 @@ function SocialMonitoringPage() {
   useEffect(() => {
     if (!user) return;
     supabase.from("discovered_matches")
-      .select("id,video_title,source_url,platform,final_confidence_score,violation_category,discovered_at,preview_url")
+      .select("id,video_title,source_url,platform,final_confidence_score,violation_category,created_at,preview_url")
       .in("platform", PLATFORMS.map((p) => p.id))
       .eq("user_id", user.id)
       .order("final_confidence_score", { ascending: false })
