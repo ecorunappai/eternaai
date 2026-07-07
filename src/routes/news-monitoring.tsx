@@ -17,7 +17,7 @@ function NewsMonitoringPage() {
   useEffect(() => {
     if (!user) return;
     supabase.from("discovered_matches")
-      .select("id,video_title,source_url,platform,final_confidence_score,violation_category,discovered_at,notes")
+      .select("id,video_title,source_url,platform,final_confidence_score,violation_category,created_at,notes")
       .in("platform", ["News", "Blog", "Website", "Reddit"])
       .eq("user_id", user.id)
       .order("final_confidence_score", { ascending: false })
@@ -59,7 +59,7 @@ function NewsMonitoringPage() {
                 }`} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{r.video_title}</div>
-                  <div className="text-xs text-muted-foreground">{r.platform} · {r.violation_category ?? "—"} · {new Date(r.discovered_at ?? Date.now()).toLocaleDateString()}</div>
+                  <div className="text-xs text-muted-foreground">{r.platform} · {r.violation_category ?? "—"} · {new Date(r.created_at ?? Date.now()).toLocaleDateString()}</div>
                 </div>
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums">{r.final_confidence_score ?? 0}</span>
                 <a href={r.source_url} target="_blank" rel="noreferrer" className="text-muted-foreground hover:text-primary"><ExternalLink className="h-4 w-4" /></a>
