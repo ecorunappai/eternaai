@@ -32,6 +32,7 @@ const intelligence: NavItem[] = [
 ];
 
 const platform: NavItem[] = [
+  { to: "/celebrity-protection", label: "Celebrity Protection", icon: Crown, star: true },
   { to: "/elite", label: "Elite Protection", icon: Crown },
   { to: "/assistant", label: "AI Assistant", icon: Sparkles },
 ];
